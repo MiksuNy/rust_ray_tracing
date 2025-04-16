@@ -1,9 +1,9 @@
-se std::io::Write;
+use std::io::Write;
 
 mod obj;
 
 fn main() {
-    let mut file = std::fs::OpenOptions::new()
+    let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .open("output.ppm")
@@ -15,7 +15,7 @@ fn main() {
     let sample_count: i32 = 1;
     let max_bounces: usize = 2;
 
-    let _ = file.write(b"P3\n320 240\n255\n");
+    let _ = output_file.write(b"P3\n320 240\n255\n");
 
     let model = obj::load("../res/dragon.obj");
 
@@ -64,11 +64,11 @@ fn main() {
             final_color = linear_to_gamma(final_color);
 
             for c in final_color.to_color() {
-                let _ = file.write(c.to_string().as_str().as_bytes());
-                let _ = file.write(b" ");
+                let _ = output_file.write(c.to_string().as_str().as_bytes());
+                let _ = output_file.write(b" ");
             }
         }
-        let _ = file.write(b"\n");
+        let _ = output_file.write(b"\n");
 
         println!("Lines remaining: {}", y);
     }
