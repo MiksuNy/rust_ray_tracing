@@ -1,9 +1,8 @@
 use std::fs;
 
 /// .obj files can contain positions (v), texture coordinates (vt), and normals (vn) in that order.
-/// Vertex colors are also possible but I don't support them for now.
 #[derive(Clone, Copy)]
-pub struct OBJVertex {
+pub struct Vertex {
     pub position: [f32; 3],
     pub tex_coord: [f32; 2],
     pub normal: [f32; 3],
@@ -11,13 +10,13 @@ pub struct OBJVertex {
 
 /// A triangle contains the indices (f) of each vertex position, texture coordinate and normal.
 #[derive(Clone, Copy)]
-pub struct OBJTriangle {
+pub struct Triangle {
     pub position_indices: [usize; 3],
     pub tex_coord_indices: [usize; 3],
     pub normal_indices: [usize; 3],
 }
 
-impl OBJTriangle {
+impl Triangle {
     fn new() -> Self {
         return Self {
             position_indices: [0; 3],
@@ -28,12 +27,12 @@ impl OBJTriangle {
 }
 
 #[derive(Clone)]
-pub struct OBJModel {
-    pub vertex_buffer: Vec<OBJVertex>,
-    pub triangle_buffer: Vec<OBJTriangle>,
+pub struct Model {
+    pub vertex_buffer: Vec<Vertex>,
+    pub triangle_buffer: Vec<Triangle>,
 }
 
-impl OBJModel {
+impl Model {
     fn new() -> Self {
         return Self {
             vertex_buffer: Vec::new(),
@@ -42,7 +41,7 @@ impl OBJModel {
     }
 }
 
-pub fn load(file_path: &str) -> OBJModel {
+pub fn load(file_path: &str) -> Model {
     let binding = fs::read_to_string(file_path).unwrap();
     let lines = binding.lines();
 
@@ -63,14 +62,14 @@ pub fn load(file_path: &str) -> OBJModel {
             normals.push(str.strip_prefix("vn ").unwrap());
         }
     });
-    for str in &positions {
+    for str in positions {
         let mut data: [f32; 3] = [0.0; 3];
         str.split_whitespace().enumerate().for_each(|(i, val)| {
             data[i] = val.parse::<f32>().expect("Error parsing position data!!!")
         });
         position_buffer.push(data);
     }
-    for str in &tex_coords {
+    for str in tex_coords {
         let mut data: [f32; 2] = [0.0; 2];
         str.split_whitespace().enumerate().for_each(|(i, val)| {
             data[i] = val
@@ -79,7 +78,7 @@ pub fn load(file_path: &str) -> OBJModel {
         });
         tex_coord_buffer.push(data);
     }
-    for str in &normals {
+    for str in normals {
         let mut data: [f32; 3] = [0.0; 3];
         str.split_whitespace().enumerate().for_each(|(i, val)| {
             data[i] = val.parse::<f32>().expect("Error parsing normal data!!!")
@@ -87,7 +86,7 @@ pub fn load(file_path: &str) -> OBJModel {
         normal_buffer.push(data);
     }
 
-    let mut triangle_buffer: Vec<OBJTriangle> = Vec::new();
+    let mut triangle_buffer: Vec<Triangle> = Vec::new();
     let mut triangles: Vec<&str> = Vec::new();
     lines.clone().for_each(|str| {
         if str.contains("f ") {
@@ -95,7 +94,7 @@ pub fn load(file_path: &str) -> OBJModel {
         }
     });
     for str in &triangles {
-        let mut triangle = OBJTriangle::new();
+        let mut triangle = Triangle::new();
         let vertices = str.split_whitespace();
         for vertex in vertices.enumerate() {
             if vertex.1.contains("//") {
@@ -141,27 +140,12 @@ pub fn load(file_path: &str) -> OBJModel {
         triangle_buffer.push(triangle);
     }
 
-    let sub_vec3 = |a: [f32; 3], b: [f32; 3]| -> [f32; 3] {
-        return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    };
-
-    let mut model = OBJModel::new();
+    let mut model = Model::new();
     model.triangle_buffer = triangle_buffer;
     for tri in model.triangle_buffer.iter() {
         for vertex in 0..3 {
-            model.vertex_buffer.push(OBJVertex {
-                position: match vertex {
-                    0 => position_buffer[tri.position_indices[0]],
-                    1 => sub_vec3(
-                        position_buffer[tri.position_indices[1]],
-                        position_buffer[tri.position_indices[0]],
-                    ),
-                    2 => sub_vec3(
-                        position_buffer[tri.position_indices[2]],
-                        position_buffer[tri.position_indices[0]],
-                    ),
-                    _ => [0.0, 0.0, 0.0],
-                },
+            model.vertex_buffer.push(Vertex {
+                position: position_buffer[tri.position_indices[vertex]],
                 tex_coord: tex_coord_buffer[tri.tex_coord_indices[vertex]],
                 normal: normal_buffer[tri.normal_indices[vertex]],
             });

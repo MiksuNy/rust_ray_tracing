@@ -1,6 +1,8 @@
+use crate::vec3::Vec3;
 use std::io::Write;
 
 mod obj;
+mod vec3;
 
 fn main() {
     let mut output_file = std::fs::OpenOptions::new()
@@ -9,15 +11,15 @@ fn main() {
         .open("output.ppm")
         .unwrap();
 
-    let width: i32 = 320;
-    let height: i32 = 240;
+    let width: i32 = 640;
+    let height: i32 = 480;
     let aspect: f32 = width as f32 / height as f32;
     let sample_count: i32 = 1;
     let max_bounces: usize = 2;
 
-    let _ = output_file.write(b"P3\n320 240\n255\n");
+    let _ = output_file.write(b"P3\n640 480\n255\n");
 
-    let model = obj::load("../res/dragon.obj");
+    let model = obj::load("../res/cube_with_floor.obj");
 
     let start_time = std::time::Instant::now();
 
@@ -92,7 +94,7 @@ fn linear_to_gamma(linear: Vec3) -> Vec3 {
     return gamma;
 }
 
-fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::OBJModel) -> Vec3 {
+fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::Model) -> Vec3 {
     let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
 
     let mut curr_bounces = 0usize;
@@ -133,34 +135,35 @@ fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::O
             i += 3;
         }
 
-        //let rand_in_sphere = Vec3::new(
-        //    rand(Vec3::mul_by_f32(
-        //        hit_info.hit_point,
-        //        8272193.0 + curr_sample as f32 * 73164.0,
-        //    )),
-        //    rand(Vec3::mul_by_f32(
-        //        hit_info.hit_point,
-        //        9826365.0 + curr_sample as f32 * 1876134.0,
-        //    )),
-        //    rand(Vec3::mul_by_f32(
-        //        hit_info.hit_point,
-        //        8731234.0 + curr_sample as f32 * 986134.0,
-        //    )),
-        //);
-        //let rand_in_hemisphere = || -> Vec3 {
-        //    if Vec3::dot(rand_in_sphere, hit_info.hit_normal) < 0.0 {
-        //        return Vec3::new(
-        //            -rand_in_sphere.data[0],
-        //            -rand_in_sphere.data[1],
-        //            -rand_in_sphere.data[2],
-        //        );
-        //    } else {
-        //        return rand_in_sphere;
-        //    }
-        //};
+        let rand_in_sphere = Vec3::new(
+            rand(Vec3::mul_by_f32(
+                hit_info.hit_point,
+                8272193.0 + curr_sample as f32 * 73164.0,
+            )),
+            rand(Vec3::mul_by_f32(
+                hit_info.hit_point,
+                9826365.0 + curr_sample as f32 * 1876134.0,
+            )),
+            rand(Vec3::mul_by_f32(
+                hit_info.hit_point,
+                8731234.0 + curr_sample as f32 * 986134.0,
+            )),
+        );
+        let rand_in_hemisphere = || -> Vec3 {
+            if Vec3::dot(rand_in_sphere, hit_info.hit_normal) < 0.0 {
+                return Vec3::new(
+                    -rand_in_sphere.data[0],
+                    -rand_in_sphere.data[1],
+                    -rand_in_sphere.data[2],
+                )
+                .normalized();
+            } else {
+                return rand_in_sphere.normalized();
+            }
+        };
 
         if hit_info.has_hit {
-            let new_dir = Vec3::reflect(ray.direction, hit_info.hit_normal).normalized();
+            let new_dir = rand_in_hemisphere();
             *ray = Ray::new(
                 Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.001)),
                 new_dir,
@@ -189,136 +192,6 @@ fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::O
 }
 
 #[derive(Clone, Copy)]
-struct Vec3 {
-    data: [f32; 3],
-}
-
-impl Vec3 {
-    fn new(x: f32, y: f32, z: f32) -> Self {
-        return Self { data: [x, y, z] };
-    }
-
-    fn to_color(self) -> [u32; 3] {
-        return [
-            f32::floor(self.data[0] * 255.0).clamp(0.0, 255.0) as u32,
-            f32::floor(self.data[1] * 255.0).clamp(0.0, 255.0) as u32,
-            f32::floor(self.data[2] * 255.0).clamp(0.0, 255.0) as u32,
-        ];
-    }
-
-    fn length(self) -> f32 {
-        return f32::sqrt(
-            (self.data[0] * self.data[0])
-                + (self.data[1] * self.data[1])
-                + (self.data[2] * self.data[2]),
-        );
-    }
-
-    fn normalized(self) -> Self {
-        return Self {
-            data: [
-                self.data[0] / self.length(),
-                self.data[1] / self.length(),
-                self.data[2] / self.length(),
-            ],
-        };
-    }
-
-    fn reflect(incident: Self, normal: Self) -> Self {
-        return Vec3::sub(
-            incident,
-            Vec3::mul_by_f32(normal, 2.0 * Vec3::dot(incident, normal)),
-        );
-    }
-
-    /// eta = ratio of indices of refraction
-    fn refract(incident: Self, normal: Self, eta: f32) -> Self {
-        let k =
-            1.0 - (eta * eta) * (1.0 - (Vec3::dot(normal, incident) * Vec3::dot(normal, incident)));
-        if k < 0.0 {
-            return Vec3::new(0.0, 0.0, 0.0);
-        } else {
-            let eta_dot_n_i = eta * Vec3::dot(normal, incident);
-            return Vec3::sub(
-                Vec3::mul_by_f32(incident, eta),
-                Vec3::mul(
-                    Vec3::new(
-                        eta_dot_n_i + f32::sqrt(k),
-                        eta_dot_n_i + f32::sqrt(k),
-                        eta_dot_n_i + f32::sqrt(k),
-                    ),
-                    normal,
-                ),
-            );
-        }
-    }
-
-    fn dot(a: Self, b: Self) -> f32 {
-        return (a.data[0] * b.data[0]) + (a.data[1] * b.data[1]) + (a.data[2] * b.data[2]);
-    }
-
-    fn cross(a: Self, b: Self) -> Self {
-        return Self {
-            data: [
-                (a.data[1] * b.data[2]) - (a.data[2] * b.data[1]),
-                (a.data[2] * b.data[0]) - (a.data[0] * b.data[2]),
-                (a.data[0] * b.data[1]) - (a.data[1] * b.data[0]),
-            ],
-        };
-    }
-
-    fn add(a: Self, b: Self) -> Self {
-        return Self {
-            data: [
-                a.data[0] + b.data[0],
-                a.data[1] + b.data[1],
-                a.data[2] + b.data[2],
-            ],
-        };
-    }
-
-    fn sub(a: Self, b: Self) -> Self {
-        return Self {
-            data: [
-                a.data[0] - b.data[0],
-                a.data[1] - b.data[1],
-                a.data[2] - b.data[2],
-            ],
-        };
-    }
-
-    fn mul(a: Self, b: Self) -> Self {
-        return Self {
-            data: [
-                a.data[0] * b.data[0],
-                a.data[1] * b.data[1],
-                a.data[2] * b.data[2],
-            ],
-        };
-    }
-
-    fn mul_by_f32(vector: Vec3, scalar: f32) -> Self {
-        return Self {
-            data: [
-                vector.data[0] * scalar,
-                vector.data[1] * scalar,
-                vector.data[2] * scalar,
-            ],
-        };
-    }
-
-    fn div(a: Self, b: Self) -> Self {
-        return Self {
-            data: [
-                a.data[0] / b.data[0],
-                a.data[1] / b.data[1],
-                a.data[2] / b.data[2],
-            ],
-        };
-    }
-}
-
-#[derive(Clone, Copy)]
 struct Ray {
     origin: Vec3,
     direction: Vec3,
@@ -330,8 +203,8 @@ impl Ray {
     }
 
     fn intersect_tri(ray: Self, tri: Triangle) -> HitInfo {
-        let edge1 = tri.vertices[1];
-        let edge2 = tri.vertices[2];
+        let edge1 = Vec3::sub(tri.vertices[1], tri.vertices[0]);
+        let edge2 = Vec3::sub(tri.vertices[2], tri.vertices[0]);
 
         let ray_cross_e2 = Vec3::cross(ray.direction, edge2);
         let det = Vec3::dot(edge1, ray_cross_e2);
@@ -370,9 +243,9 @@ struct Triangle {
 }
 
 impl Triangle {
-    fn new(p1: Vec3, e1: Vec3, e2: Vec3) -> Self {
+    fn new(p1: Vec3, p2: Vec3, p3: Vec3) -> Self {
         return Self {
-            vertices: [p1, e1, e2],
+            vertices: [p1, p2, p3],
         };
     }
 }
