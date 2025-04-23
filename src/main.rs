@@ -5,19 +5,21 @@ mod obj;
 mod vec3;
 
 fn main() {
+    let mut rng_state: u32;
+
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .open("output.ppm")
         .unwrap();
 
-    let width: i32 = 640;
-    let height: i32 = 480;
+    let width: u32 = 320;
+    let height: u32 = 240;
     let aspect: f32 = width as f32 / height as f32;
-    let sample_count: i32 = 1;
-    let max_bounces: usize = 2;
+    let sample_count: usize = 4;
+    let max_bounces: usize = 4;
 
-    let _ = output_file.write(b"P3\n640 480\n255\n");
+    let _ = output_file.write(b"P3\n320 240\n255\n");
 
     let model = obj::load("../res/cube_with_floor.obj");
 
@@ -28,21 +30,21 @@ fn main() {
             let mut final_color = Vec3::new(0.0, 0.0, 0.0);
 
             for curr_sample in 0..sample_count {
+                let ndc_x: f32 = x as f32 / width as f32;
+                let ndc_y: f32 = y as f32 / height as f32;
+
+                let screen_x: f32 = ((ndc_x * 2.0) - 1.0) * aspect;
+                let screen_y: f32 = (ndc_y * 2.0) - 1.0;
+
+                rng_state = ((ndc_x / width as f32 * 95729371.0 + curr_sample as f32)
+                    + (ndc_y / height as f32 * 43879571.0 + curr_sample as f32))
+                    as u32;
+
                 let mut ray = Ray::new(
-                    Vec3::new(0.0, 0.0, 0.7),
+                    Vec3::new(0.0, 0.0, 1.0),
                     Vec3::new(
-                        ((((x as f32 / width as f32) * 2.0) - 1.0) * aspect)
-                            + rand(Vec3::new(
-                                x as f32 * 8721.0,
-                                curr_sample as f32 * 78612.0,
-                                0.0,
-                            )) * 0.001,
-                        (((y as f32 / height as f32) * 2.0) - 1.0)
-                            + rand(Vec3::new(
-                                y as f32 * 4647.0,
-                                curr_sample as f32 * 87124.0,
-                                0.0,
-                            )) * 0.001,
+                        screen_x + Vec3::rand_f32(&mut rng_state) * 0.001,
+                        screen_y + Vec3::rand_f32(&mut rng_state) * 0.001,
                         -1.0,
                     )
                     .normalized(),
@@ -50,7 +52,7 @@ fn main() {
 
                 final_color = Vec3::add(
                     final_color,
-                    trace_ray(&mut ray, max_bounces, curr_sample, &model),
+                    trace_ray(&mut ray, max_bounces, &model, &mut rng_state),
                 );
             }
 
@@ -80,10 +82,6 @@ fn main() {
     println!("Rendering took {} ms", (end_time - start_time).as_millis());
 }
 
-fn rand(seed: Vec3) -> f32 {
-    return f32::fract(f32::sin(Vec3::dot(seed, Vec3::new(12.9898, 78.233, 0.0))));
-}
-
 fn linear_to_gamma(linear: Vec3) -> Vec3 {
     let mut gamma = Vec3::new(0.0, 0.0, 0.0);
     for i in 0..3 {
@@ -94,7 +92,7 @@ fn linear_to_gamma(linear: Vec3) -> Vec3 {
     return gamma;
 }
 
-fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::Model) -> Vec3 {
+fn trace_ray(ray: &mut Ray, max_bounces: usize, model: &obj::Model, rng_state: &mut u32) -> Vec3 {
     let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
 
     let mut curr_bounces = 0usize;
@@ -135,38 +133,16 @@ fn trace_ray(ray: &mut Ray, max_bounces: usize, curr_sample: i32, model: &obj::M
             i += 3;
         }
 
-        let rand_in_sphere = Vec3::new(
-            rand(Vec3::mul_by_f32(
-                hit_info.hit_point,
-                8272193.0 + curr_sample as f32 * 73164.0,
-            )),
-            rand(Vec3::mul_by_f32(
-                hit_info.hit_point,
-                9826365.0 + curr_sample as f32 * 1876134.0,
-            )),
-            rand(Vec3::mul_by_f32(
-                hit_info.hit_point,
-                8731234.0 + curr_sample as f32 * 986134.0,
-            )),
-        );
-        let rand_in_hemisphere = || -> Vec3 {
-            if Vec3::dot(rand_in_sphere, hit_info.hit_normal) < 0.0 {
-                return Vec3::new(
-                    -rand_in_sphere.data[0],
-                    -rand_in_sphere.data[1],
-                    -rand_in_sphere.data[2],
-                )
-                .normalized();
-            } else {
-                return rand_in_sphere.normalized();
-            }
-        };
-
         if hit_info.has_hit {
-            let new_dir = rand_in_hemisphere();
+            let unit_sphere = Vec3::rand_in_unit_sphere(rng_state);
+            let unit_hemisphere = match Vec3::dot(unit_sphere, hit_info.hit_normal) > 0.0 {
+                true => unit_sphere,
+                false => unit_sphere.reverse(),
+            };
+
             *ray = Ray::new(
-                Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.001)),
-                new_dir,
+                Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(unit_hemisphere, 0.001)),
+                unit_hemisphere,
             );
 
             ray_color = Vec3::mul(ray_color, Vec3::new(0.5, 0.5, 0.5));

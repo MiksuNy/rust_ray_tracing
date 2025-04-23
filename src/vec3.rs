@@ -107,7 +107,7 @@ impl Vec3 {
         };
     }
 
-    pub fn mul_by_f32(vector: Vec3, scalar: f32) -> Self {
+    pub fn mul_by_f32(vector: Self, scalar: f32) -> Self {
         return Self {
             data: [
                 vector.data[0] * scalar,
@@ -125,5 +125,40 @@ impl Vec3 {
                 a.data[2] / b.data[2],
             ],
         };
+    }
+
+    pub fn reverse(&self) -> Self {
+        return Self {
+            data: [-self.data[0], -self.data[1], -self.data[2]],
+        };
+    }
+
+    // https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
+    fn pcg_hash(input: &mut u32) -> u32 {
+        *input = input.wrapping_mul(747796405u32 + 2891336453u32);
+        let word: u32 =
+            ((*input >> ((*input >> 28u32) + 4u32)) ^ *input).wrapping_mul(277803737u32);
+        return (word >> 22u32) ^ word;
+    }
+
+    pub fn rand_f32(input: &mut u32) -> f32 {
+        return Vec3::pcg_hash(input) as f32 / u32::MAX as f32;
+    }
+
+    fn rand_f32_nd(input: &mut u32) -> f32 {
+        let theta = 6.283185 * Vec3::rand_f32(input);
+        let rho = f32::sqrt(-2.0 * f32::log10(Vec3::rand_f32(input)));
+        return rho * f32::cos(theta);
+    }
+
+    pub fn rand_in_unit_sphere(input: &mut u32) -> Self {
+        return Self {
+            data: [
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+            ],
+        }
+        .normalized();
     }
 }
