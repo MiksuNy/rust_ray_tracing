@@ -8,9 +8,9 @@ mod ray;
 mod vec3;
 
 const WIDTH: u32 = 640;
-const HEIGHT: u32 = 320;
+const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 10;
+const SAMPLE_COUNT: usize = 30;
 const MAX_BOUNCES: usize = 8;
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
         .open("output.ppm")
         .unwrap();
 
-    let _ = output_file.write(b"P3\n640 320\n255\n");
+    let _ = output_file.write(b"P3\n640 480\n255\n");
 
     let model = obj::load("../res/cube_with_floor.obj");
 
