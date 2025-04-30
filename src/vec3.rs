@@ -133,16 +133,17 @@ impl Vec3 {
         };
     }
 
-    // https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
-    fn pcg_hash(input: &mut u32) -> u32 {
-        *input = input.wrapping_mul(747796405u32 + 2891336453u32);
-        let word: u32 =
-            ((*input >> ((*input >> 28u32) + 4u32)) ^ *input).wrapping_mul(277803737u32);
-        return (word >> 22u32) ^ word;
+    fn xor_shift(input: &mut u32) -> u32 {
+        let mut x: u32 = *input;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        *input = x;
+        return x;
     }
 
     pub fn rand_f32(input: &mut u32) -> f32 {
-        return Vec3::pcg_hash(input) as f32 / u32::MAX as f32;
+        return Vec3::xor_shift(input) as f32 / u32::MAX as f32;
     }
 
     fn rand_f32_nd(input: &mut u32) -> f32 {
@@ -160,5 +161,15 @@ impl Vec3 {
             ],
         }
         .normalized();
+    }
+
+    pub fn linear_to_gamma(linear: Self) -> Self {
+        let mut gamma = Vec3::new(0.0, 0.0, 0.0);
+        for i in 0..3 {
+            if linear.data[i] > 0.0 {
+                gamma.data[i] = f32::sqrt(linear.data[i]);
+            }
+        }
+        return gamma;
     }
 }
