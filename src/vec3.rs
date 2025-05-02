@@ -8,6 +8,10 @@ impl Vec3 {
         return Self { data: [x, y, z] };
     }
 
+    pub fn new_from_f32(f: f32) -> Self {
+        return Self { data: [f, f, f] };
+    }
+
     pub fn to_color(self) -> [u32; 3] {
         return [
             f32::floor(self.data[0] * 255.0).clamp(0.0, 255.0) as u32,

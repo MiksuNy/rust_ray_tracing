@@ -105,14 +105,7 @@ impl Ray {
             }
         }
 
-        return Vec3::div(
-            ray_color,
-            Vec3::new(
-                curr_bounces as f32,
-                curr_bounces as f32,
-                curr_bounces as f32,
-            ),
-        );
+        return Vec3::div(ray_color, Vec3::new_from_f32(curr_bounces as f32));
     }
 }
 

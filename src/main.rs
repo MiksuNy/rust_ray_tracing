@@ -53,14 +53,7 @@ fn main() {
                 );
             }
 
-            final_color = Vec3::div(
-                final_color,
-                Vec3::new(
-                    SAMPLE_COUNT as f32,
-                    SAMPLE_COUNT as f32,
-                    SAMPLE_COUNT as f32,
-                ),
-            );
+            final_color = Vec3::div(final_color, Vec3::new_from_f32(SAMPLE_COUNT as f32));
 
             final_color = Vec3::linear_to_gamma(final_color);
 
