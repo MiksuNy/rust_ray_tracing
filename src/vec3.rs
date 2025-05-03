@@ -8,6 +8,10 @@ impl Vec3 {
         return Self { data: [x, y, z] };
     }
 
+    pub fn new_from_f32(f: f32) -> Self {
+        return Self { data: [f, f, f] };
+    }
+
     pub fn to_color(self) -> [u32; 3] {
         return [
             f32::floor(self.data[0] * 255.0).clamp(0.0, 255.0) as u32,
@@ -107,7 +111,7 @@ impl Vec3 {
         };
     }
 
-    pub fn mul_by_f32(vector: Vec3, scalar: f32) -> Self {
+    pub fn mul_by_f32(vector: Self, scalar: f32) -> Self {
         return Self {
             data: [
                 vector.data[0] * scalar,
@@ -125,5 +129,51 @@ impl Vec3 {
                 a.data[2] / b.data[2],
             ],
         };
+    }
+
+    pub fn reverse(&self) -> Self {
+        return Self {
+            data: [-self.data[0], -self.data[1], -self.data[2]],
+        };
+    }
+
+    fn xor_shift(input: &mut u32) -> u32 {
+        let mut x: u32 = *input;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        *input = x;
+        return x;
+    }
+
+    pub fn rand_f32(input: &mut u32) -> f32 {
+        return Vec3::xor_shift(input) as f32 / u32::MAX as f32;
+    }
+
+    fn rand_f32_nd(input: &mut u32) -> f32 {
+        let theta = 6.283185 * Vec3::rand_f32(input);
+        let rho = f32::sqrt(-2.0 * f32::log10(Vec3::rand_f32(input)));
+        return rho * f32::cos(theta);
+    }
+
+    pub fn rand_in_unit_sphere(input: &mut u32) -> Self {
+        return Self {
+            data: [
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+            ],
+        }
+        .normalized();
+    }
+
+    pub fn linear_to_gamma(linear: Self) -> Self {
+        let mut gamma = Vec3::new(0.0, 0.0, 0.0);
+        for i in 0..3 {
+            if linear.data[i] > 0.0 {
+                gamma.data[i] = f32::sqrt(linear.data[i]);
+            }
+        }
+        return gamma;
     }
 }
