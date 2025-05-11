@@ -17,6 +17,7 @@ fn main() {
     // Initialize the prng to some big value
     let mut rng_state: u32 = 987612486;
 
+    let mut output_buffer: Vec<u8> = Vec::new();
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -58,14 +59,16 @@ fn main() {
             final_color = Vec3::linear_to_gamma(final_color);
 
             for c in final_color.to_color() {
-                let _ = output_file.write(c.to_string().as_str().as_bytes());
-                let _ = output_file.write(b" ");
+                let _ = output_buffer.write(c.to_string().as_str().as_bytes());
+                let _ = output_buffer.write(b" ");
             }
         }
-        let _ = output_file.write(b"\n");
+        let _ = output_buffer.write(b"\n");
 
         println!("Lines remaining: {}", y);
     }
+
+    let _ = output_file.write(output_buffer.as_slice());
 
     let end_time = std::time::Instant::now();
 
