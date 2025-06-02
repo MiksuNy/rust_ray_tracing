@@ -1,14 +1,19 @@
-use crate::vec3::Vec3;
+use crate::{obj::Model, vec3::Vec3};
 
-#[derive(Clone, Copy)]
-pub struct Triangle {
-    pub vertices: [Vec3; 3],
+pub struct BVH {
+    nodes: Vec<AABB>,
 }
 
-impl Triangle {
-    pub fn new(p1: Vec3, p2: Vec3, p3: Vec3) -> Self {
+struct AABB {
+    bounds_min: Vec3,
+    bounds_max: Vec3,
+}
+
+impl AABB {
+    pub fn new(bounds_min: Vec3, bounds_max: Vec3) -> Self {
         return Self {
-            vertices: [p1, p2, p3],
+            bounds_min,
+            bounds_max,
         };
     }
 }
