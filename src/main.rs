@@ -1,3 +1,4 @@
+use crate::obj::Model;
 use crate::ray::Ray;
 use crate::vec3::Vec3;
 use std::io::Write;
@@ -10,14 +11,15 @@ mod vec3;
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 30;
-const MAX_BOUNCES: usize = 8;
+const SAMPLE_COUNT: usize = 1;
+const MAX_BOUNCES: usize = 3;
 
 fn main() {
     // Initialize the prng to some big value
     let mut rng_state: u32 = 987612486;
 
     let mut output_buffer: Vec<u8> = Vec::new();
+    output_buffer.reserve_exact(((WIDTH + WIDTH) * HEIGHT) as usize);
     let mut output_file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -26,7 +28,7 @@ fn main() {
 
     let _ = output_file.write(b"P3\n640 480\n255\n");
 
-    let model = obj::load("../res/cube_with_floor.obj");
+    let model = Model::load("../res/suzanne_eyes.obj", Some("../res/suzanne_eyes.mtl"));
 
     let start_time = std::time::Instant::now();
 
@@ -38,8 +40,8 @@ fn main() {
             let screen_y = ((y as f32 / HEIGHT as f32) * 2.0) - 1.0;
 
             for _ in 0..SAMPLE_COUNT {
-                let mut ray = Ray::new(
-                    Vec3::new(0.0, 0.0, 1.0),
+                let ray = Ray::new(
+                    Vec3::new(0.0, 0.0, 2.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
@@ -50,11 +52,11 @@ fn main() {
 
                 final_color = Vec3::add(
                     final_color,
-                    Ray::trace(&mut ray, MAX_BOUNCES, &model, &mut rng_state),
+                    Ray::trace(ray, MAX_BOUNCES, model.clone(), &mut rng_state),
                 );
             }
 
-            final_color = Vec3::div(final_color, Vec3::new_from_f32(SAMPLE_COUNT as f32));
+            final_color = Vec3::div(final_color, Vec3::from_f32(SAMPLE_COUNT as f32));
 
             final_color = Vec3::linear_to_gamma(final_color);
 

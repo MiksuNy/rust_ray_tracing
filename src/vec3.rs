@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Clone, Copy)]
 pub struct Vec3 {
     pub data: [f32; 3],
@@ -8,7 +10,11 @@ impl Vec3 {
         return Self { data: [x, y, z] };
     }
 
-    pub fn new_from_f32(f: f32) -> Self {
+    pub fn from_array(data: [f32; 3]) -> Self {
+        return Self { data };
+    }
+
+    pub fn from_f32(f: f32) -> Self {
         return Self { data: [f, f, f] };
     }
 
@@ -175,5 +181,11 @@ impl Vec3 {
             }
         }
         return gamma;
+    }
+}
+
+impl Display for Vec3 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {}, {})", self.data[0], self.data[1], self.data[2])
     }
 }
