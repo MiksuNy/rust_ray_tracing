@@ -45,24 +45,24 @@ impl Vec3 {
     }
 
     pub fn reflect(incident: Self, normal: Self) -> Self {
-        return Vec3::sub(
+        return Self::sub(
             incident,
-            Vec3::mul_by_f32(normal, 2.0 * Vec3::dot(incident, normal)),
+            Self::mul_by_f32(normal, 2.0 * Self::dot(incident, normal)),
         );
     }
 
     /// eta = ratio of indices of refraction
     pub fn refract(incident: Self, normal: Self, eta: f32) -> Self {
         let k =
-            1.0 - (eta * eta) * (1.0 - (Vec3::dot(normal, incident) * Vec3::dot(normal, incident)));
+            1.0 - (eta * eta) * (1.0 - (Self::dot(normal, incident) * Self::dot(normal, incident)));
         if k < 0.0 {
-            return Vec3::new(0.0, 0.0, 0.0);
+            return Self::new(0.0, 0.0, 0.0);
         } else {
-            let eta_dot_n_i = eta * Vec3::dot(normal, incident);
-            return Vec3::sub(
-                Vec3::mul_by_f32(incident, eta),
-                Vec3::mul(
-                    Vec3::new(
+            let eta_dot_n_i = eta * Self::dot(normal, incident);
+            return Self::sub(
+                Self::mul_by_f32(incident, eta),
+                Self::mul(
+                    Self::new(
                         eta_dot_n_i + f32::sqrt(k),
                         eta_dot_n_i + f32::sqrt(k),
                         eta_dot_n_i + f32::sqrt(k),
@@ -153,28 +153,37 @@ impl Vec3 {
     }
 
     pub fn rand_f32(input: &mut u32) -> f32 {
-        return Vec3::xor_shift(input) as f32 / u32::MAX as f32;
+        return Self::xor_shift(input) as f32 / u32::MAX as f32;
     }
 
     fn rand_f32_nd(input: &mut u32) -> f32 {
-        let theta = 6.283185 * Vec3::rand_f32(input);
-        let rho = f32::sqrt(-2.0 * f32::log10(Vec3::rand_f32(input)));
+        let theta = 6.283185 * Self::rand_f32(input);
+        let rho = f32::sqrt(-2.0 * f32::log10(Self::rand_f32(input)));
         return rho * f32::cos(theta);
     }
 
     pub fn rand_in_unit_sphere(input: &mut u32) -> Self {
         return Self {
             data: [
-                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
-                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
-                (Vec3::rand_f32_nd(input) * 2.0) - 1.0,
+                (Self::rand_f32_nd(input) * 2.0) - 1.0,
+                (Self::rand_f32_nd(input) * 2.0) - 1.0,
+                (Self::rand_f32_nd(input) * 2.0) - 1.0,
             ],
         }
         .normalized();
     }
 
+    pub fn rand_in_unit_hemisphere(input: &mut u32, normal: Self) -> Self {
+        let unit_sphere = Self::rand_in_unit_sphere(input);
+        if Self::dot(unit_sphere, normal) < 0.0 {
+            return unit_sphere.reverse();
+        } else {
+            return unit_sphere;
+        }
+    }
+
     pub fn linear_to_gamma(linear: Self) -> Self {
-        let mut gamma = Vec3::new(0.0, 0.0, 0.0);
+        let mut gamma = Self::new(0.0, 0.0, 0.0);
         for i in 0..3 {
             if linear.data[i] > 0.0 {
                 gamma.data[i] = f32::sqrt(linear.data[i]);

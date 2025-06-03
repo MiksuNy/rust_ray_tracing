@@ -11,8 +11,8 @@ mod vec3;
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 3;
+const SAMPLE_COUNT: usize = 20;
+const MAX_BOUNCES: usize = 8;
 
 fn main() {
     // Initialize the prng to some big value
@@ -28,7 +28,7 @@ fn main() {
 
     let _ = output_file.write(b"P3\n640 480\n255\n");
 
-    let model = Model::load("../res/suzanne_eyes.obj", Some("../res/suzanne_eyes.mtl"));
+    let model = Model::load("../res/cube_with_floor.obj", None);
 
     let start_time = std::time::Instant::now();
 
@@ -41,7 +41,7 @@ fn main() {
 
             for _ in 0..SAMPLE_COUNT {
                 let ray = Ray::new(
-                    Vec3::new(0.0, 0.0, 2.0),
+                    Vec3::new(0.0, 0.0, 1.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
@@ -52,7 +52,7 @@ fn main() {
 
                 final_color = Vec3::add(
                     final_color,
-                    Ray::trace(ray, MAX_BOUNCES, model.clone(), &mut rng_state),
+                    Ray::trace(ray, MAX_BOUNCES, &model, &mut rng_state),
                 );
             }
 

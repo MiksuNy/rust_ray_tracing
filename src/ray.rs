@@ -39,7 +39,7 @@ impl Ray {
         }
 
         return HitInfo {
-            has_hit: t > 0.001
+            has_hit: t > 0.0001
                 && !(det < 0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
@@ -50,7 +50,7 @@ impl Ray {
         };
     }
 
-    pub fn trace(mut ray: Self, max_bounces: usize, model: Model, rng_state: &mut u32) -> Vec3 {
+    pub fn trace(mut ray: Self, max_bounces: usize, model: &Model, rng_state: &mut u32) -> Vec3 {
         let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
@@ -79,22 +79,19 @@ impl Ray {
                     .nth(hit_info.hit_material_id)
                     .unwrap();
 
-                let new_dir: Vec3;
-                let unit_sphere = Vec3::rand_in_unit_sphere(rng_state);
-                if Vec3::dot(unit_sphere, hit_info.hit_normal) > 0.0 {
-                    new_dir = unit_sphere;
-                } else {
-                    new_dir = unit_sphere.reverse();
-                }
-                ray = Ray::new(hit_info.hit_point, new_dir);
+                let new_dir = Vec3::rand_in_unit_hemisphere(rng_state, hit_info.hit_normal);
+                ray = Ray::new(
+                    Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.00001)),
+                    new_dir,
+                );
 
                 emitted_light = Vec3::add(emitted_light, hit_material.emission);
                 ray_color = Vec3::mul(ray_color, hit_material.diffuse_color);
-                incoming_light = Vec3::add(emitted_light, ray_color);
+                incoming_light = Vec3::add(incoming_light, Vec3::mul(emitted_light, ray_color));
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.0, 0.0, 0.0);
+                let sky_color = Vec3::new(0.8, 0.8, 0.8);
                 emitted_light = Vec3::add(emitted_light, sky_color);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(emitted_light, ray_color);
