@@ -1,4 +1,5 @@
 use crate::Vec3;
+use crate::bvh::BVH;
 use std::fs;
 
 #[derive(Clone)]
@@ -8,7 +9,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    pub fn new(p1: [f32; 3], p2: [f32; 3], p3: [f32; 3], material_id: usize) -> Self {
+    fn new(p1: [f32; 3], p2: [f32; 3], p3: [f32; 3], material_id: usize) -> Self {
         return Self {
             vertices: [
                 Vec3::from_array(p1),
@@ -19,7 +20,7 @@ impl Triangle {
         };
     }
 
-    pub fn mid(self) -> Vec3 {
+    pub fn mid(&self) -> Vec3 {
         return Vec3::from_array(
             Vec3::sub(
                 self.vertices[0],
@@ -41,6 +42,7 @@ pub struct Material {
 pub struct Model {
     pub tris: Vec<Triangle>,
     pub materials: Vec<Material>,
+    pub bvh: BVH,
 }
 
 impl Model {
@@ -48,13 +50,14 @@ impl Model {
         return Self {
             tris: Vec::new(),
             materials: Vec::new(),
+            bvh: BVH::new(),
         };
     }
 
-    /// Parses an obj file and optionally an mtl file, returns a Model.
+    /// Parses a .obj file and optionally a .mtl file, returns a Model.
     /// If mtl_path is None, creates a default material which all triangles then use.
     /// i.e., model.materials will always have a length of at least 1.
-    pub fn load(obj_path: &str, mtl_path: Option<&str>) -> Model {
+    pub fn load(obj_path: &str, mtl_path: Option<&str>, bvh_depth: usize) -> Model {
         let mut model = Model::new();
 
         let binding = fs::read_to_string(obj_path).unwrap();
@@ -120,7 +123,7 @@ impl Model {
         } else {
             model.materials.push(Material {
                 name: String::from("default_material"),
-                diffuse_color: Vec3::new(0.9, 0.9, 0.9),
+                diffuse_color: Vec3::new(0.5, 0.5, 0.5),
                 emission: Vec3::new(0.0, 0.0, 0.0),
             });
         }
@@ -193,6 +196,8 @@ impl Model {
                 _ => (),
             }
         }
+
+        model.bvh = BVH::build(&mut model, bvh_depth);
 
         return model;
     }

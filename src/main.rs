@@ -11,8 +11,8 @@ mod vec3;
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 20;
-const MAX_BOUNCES: usize = 8;
+const SAMPLE_COUNT: usize = 10;
+const MAX_BOUNCES: usize = 4;
 
 fn main() {
     // Initialize the prng to some big value
@@ -25,10 +25,13 @@ fn main() {
         .create(true)
         .open("output.ppm")
         .unwrap();
+    let _ = output_file.write_fmt(format_args!("P3\n{} {}\n255\n", WIDTH, HEIGHT));
 
-    let _ = output_file.write(b"P3\n640 480\n255\n");
-
-    let model = Model::load("../res/cube_with_floor.obj", None);
+    let model = Model::load(
+        "../res/teapot_diffuse.obj",
+        Some("../res/teapot_diffuse.mtl"),
+        4,
+    );
 
     let start_time = std::time::Instant::now();
 
@@ -40,8 +43,8 @@ fn main() {
             let screen_y = ((y as f32 / HEIGHT as f32) * 2.0) - 1.0;
 
             for _ in 0..SAMPLE_COUNT {
-                let ray = Ray::new(
-                    Vec3::new(0.0, 0.0, 1.0),
+                let mut ray = Ray::new(
+                    Vec3::new(0.0, 0.0, 3.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
@@ -52,7 +55,7 @@ fn main() {
 
                 final_color = Vec3::add(
                     final_color,
-                    Ray::trace(ray, MAX_BOUNCES, &model, &mut rng_state),
+                    Ray::trace(&mut ray, MAX_BOUNCES, &model, &mut rng_state),
                 );
             }
 

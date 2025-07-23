@@ -1,6 +1,6 @@
 use crate::Vec3;
-use crate::obj::Model;
-use crate::obj::Triangle;
+use crate::bvh::Node;
+use crate::obj::{Model, Triangle};
 
 #[derive(Clone, Copy)]
 pub struct Ray {
@@ -8,12 +8,32 @@ pub struct Ray {
     pub direction: Vec3,
 }
 
+struct HitInfo {
+    has_hit: bool,
+    hit_point: Vec3,
+    hit_normal: Vec3,
+    hit_distance: f32,
+    hit_material_id: usize,
+}
+
+impl Default for HitInfo {
+    fn default() -> Self {
+        return Self {
+            has_hit: false,
+            hit_point: Vec3::default(),
+            hit_normal: Vec3::default(),
+            hit_distance: f32::MAX,
+            hit_material_id: 0,
+        };
+    }
+}
+
 impl Ray {
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
         return Self { origin, direction };
     }
 
-    fn intersect_tri(ray: Self, tri: Triangle) -> HitInfo {
+    fn intersect_tri(ray: &Self, tri: &Triangle) -> HitInfo {
         let edge1 = Vec3::sub(tri.vertices[1], tri.vertices[0]);
         let edge2 = Vec3::sub(tri.vertices[2], tri.vertices[0]);
 
@@ -50,38 +70,41 @@ impl Ray {
         };
     }
 
-    pub fn trace(mut ray: Self, max_bounces: usize, model: &Model, rng_state: &mut u32) -> Vec3 {
+    fn intersect_node(ray: &Self, node: &Node) -> bool {
+        let t_min = Vec3::div(Vec3::sub(node.bounds_min, ray.origin), ray.direction);
+        let t_max = Vec3::div(Vec3::sub(node.bounds_max, ray.origin), ray.direction);
+        let t_1 = Vec3::min(t_min, t_max);
+        let t_2 = Vec3::max(t_min, t_max);
+        let t_near = f32::max(f32::max(t_1.data[0], t_1.data[1]), t_1.data[2]);
+        let t_far = f32::min(f32::min(t_2.data[0], t_2.data[1]), t_2.data[2]);
+        return t_near < t_far;
+    }
+
+    pub fn trace(ray: &mut Self, max_bounces: usize, model: &Model, rng_state: &mut u32) -> Vec3 {
         let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
 
-        let mut curr_bounces = 0usize;
+        let mut curr_bounces: usize = 0;
         while curr_bounces < max_bounces {
-            let mut hit_info = HitInfo {
-                hit_distance: 100000.0,
-                hit_point: Vec3::new(0.0, 0.0, 0.0),
-                hit_normal: Vec3::new(0.0, 0.0, 0.0),
-                has_hit: false,
-                hit_material_id: 0,
-            };
+            let mut hit_info = HitInfo::default();
 
-            for tri in model.tris.clone() {
-                let temp_hit_info = Ray::intersect_tri(ray, tri);
-                if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
-                    hit_info = temp_hit_info;
+            // TODO: Replace this with the *actual* BVH traversal
+            if Ray::intersect_node(ray, &model.bvh.nodes[0]) {
+                for tri in &model.tris {
+                    let temp_hit_info = Ray::intersect_tri(ray, tri);
+                    if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
+                        hit_info = temp_hit_info;
+                    }
                 }
             }
 
             if hit_info.has_hit {
-                let hit_material = model
-                    .materials
-                    .iter()
-                    .nth(hit_info.hit_material_id)
-                    .unwrap();
+                let hit_material = &model.materials[hit_info.hit_material_id];
 
                 let new_dir = Vec3::rand_in_unit_hemisphere(rng_state, hit_info.hit_normal);
-                ray = Ray::new(
-                    Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.00001)),
+                *ray = Ray::new(
+                    Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.0001)),
                     new_dir,
                 );
 
@@ -91,10 +114,9 @@ impl Ray {
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.8, 0.8, 0.8);
-                emitted_light = Vec3::add(emitted_light, sky_color);
+                let sky_color = Vec3::new(0.98, 0.95, 0.99);
                 ray_color = Vec3::mul(ray_color, sky_color);
-                incoming_light = Vec3::add(emitted_light, ray_color);
+                incoming_light = Vec3::add(incoming_light, ray_color);
 
                 curr_bounces += 1;
 
@@ -104,12 +126,4 @@ impl Ray {
 
         return Vec3::div(incoming_light, Vec3::from_f32(curr_bounces as f32));
     }
-}
-
-pub struct HitInfo {
-    pub has_hit: bool,
-    pub hit_point: Vec3,
-    pub hit_normal: Vec3,
-    pub hit_distance: f32,
-    pub hit_material_id: usize,
 }

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Vec3 {
     pub data: [f32; 3],
 }
@@ -137,7 +137,37 @@ impl Vec3 {
         };
     }
 
-    pub fn reverse(&self) -> Self {
+    pub fn min(a: Self, b: Self) -> Self {
+        return Self {
+            data: [
+                f32::min(a.data[0], b.data[0]),
+                f32::min(a.data[1], b.data[1]),
+                f32::min(a.data[2], b.data[2]),
+            ],
+        };
+    }
+
+    pub fn max(a: Self, b: Self) -> Self {
+        return Self {
+            data: [
+                f32::max(a.data[0], b.data[0]),
+                f32::max(a.data[1], b.data[1]),
+                f32::max(a.data[2], b.data[2]),
+            ],
+        };
+    }
+
+    pub fn abs(self) -> Self {
+        return Self {
+            data: [
+                f32::abs(self.data[0]),
+                f32::abs(self.data[1]),
+                f32::abs(self.data[2]),
+            ],
+        };
+    }
+
+    pub fn reversed(self) -> Self {
         return Self {
             data: [-self.data[0], -self.data[1], -self.data[2]],
         };
@@ -152,6 +182,7 @@ impl Vec3 {
         return x;
     }
 
+    /// Returns a random f32 in the range 0.0 - 1.0
     pub fn rand_f32(input: &mut u32) -> f32 {
         return Self::xor_shift(input) as f32 / u32::MAX as f32;
     }
@@ -176,7 +207,7 @@ impl Vec3 {
     pub fn rand_in_unit_hemisphere(input: &mut u32, normal: Self) -> Self {
         let unit_sphere = Self::rand_in_unit_sphere(input);
         if Self::dot(unit_sphere, normal) < 0.0 {
-            return unit_sphere.reverse();
+            return unit_sphere.reversed();
         } else {
             return unit_sphere;
         }
