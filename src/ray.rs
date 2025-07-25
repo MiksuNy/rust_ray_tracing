@@ -80,6 +80,25 @@ impl Ray {
         return t_near < t_far;
     }
 
+    fn traverse_bvh(ray: &Self, model: &Model, index: usize, hit_info: &mut HitInfo) {
+        let node = model.bvh.nodes[index];
+        if !Self::intersect_node(ray, &node) {
+            return;
+        }
+
+        if node.num_tris > 0 {
+            for i in 0..node.num_tris {
+                let temp_hit_info = Self::intersect_tri(ray, &model.tris[node.first_tri_id + i]);
+                if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
+                    *hit_info = temp_hit_info;
+                }
+            }
+        } else {
+            Self::traverse_bvh(ray, model, node.children_id, hit_info);
+            Self::traverse_bvh(ray, model, node.children_id + 1, hit_info);
+        }
+    }
+
     pub fn trace(ray: &mut Self, max_bounces: usize, model: &Model, rng_state: &mut u32) -> Vec3 {
         let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
@@ -89,21 +108,13 @@ impl Ray {
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
 
-            // TODO: Replace this with the *actual* BVH traversal
-            if Ray::intersect_node(ray, &model.bvh.nodes[0]) {
-                for tri in &model.tris {
-                    let temp_hit_info = Ray::intersect_tri(ray, tri);
-                    if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
-                        hit_info = temp_hit_info;
-                    }
-                }
-            }
+            Self::traverse_bvh(ray, model, 0, &mut hit_info);
 
             if hit_info.has_hit {
                 let hit_material = &model.materials[hit_info.hit_material_id];
 
                 let new_dir = Vec3::rand_in_unit_hemisphere(rng_state, hit_info.hit_normal);
-                *ray = Ray::new(
+                *ray = Self::new(
                     Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.0001)),
                     new_dir,
                 );
@@ -114,7 +125,7 @@ impl Ray {
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.98, 0.95, 0.99);
+                let sky_color = Vec3::new(0.9, 0.9, 0.9);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
 

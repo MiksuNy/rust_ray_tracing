@@ -12,7 +12,7 @@ const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
 const SAMPLE_COUNT: usize = 10;
-const MAX_BOUNCES: usize = 4;
+const MAX_BOUNCES: usize = 6;
 
 fn main() {
     // Initialize the prng to some big value
@@ -27,11 +27,7 @@ fn main() {
         .unwrap();
     let _ = output_file.write_fmt(format_args!("P3\n{} {}\n255\n", WIDTH, HEIGHT));
 
-    let model = Model::load(
-        "../res/teapot_diffuse.obj",
-        Some("../res/teapot_diffuse.mtl"),
-        4,
-    );
+    let model = Model::load("../res/dragon_no_floor.obj", None);
 
     let start_time = std::time::Instant::now();
 
@@ -44,7 +40,7 @@ fn main() {
 
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
-                    Vec3::new(0.0, 0.0, 3.0),
+                    Vec3::new(0.0, 0.0, 1.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,

@@ -57,7 +57,7 @@ impl Model {
     /// Parses a .obj file and optionally a .mtl file, returns a Model.
     /// If mtl_path is None, creates a default material which all triangles then use.
     /// i.e., model.materials will always have a length of at least 1.
-    pub fn load(obj_path: &str, mtl_path: Option<&str>, bvh_depth: usize) -> Model {
+    pub fn load(obj_path: &str, mtl_path: Option<&str>) -> Model {
         let mut model = Model::new();
 
         let binding = fs::read_to_string(obj_path).unwrap();
@@ -197,7 +197,7 @@ impl Model {
             }
         }
 
-        model.bvh = BVH::build(&mut model, bvh_depth);
+        BVH::build(&mut model);
 
         return model;
     }
