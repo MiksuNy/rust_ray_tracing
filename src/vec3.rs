@@ -196,9 +196,9 @@ impl Vec3 {
     pub fn rand_in_unit_sphere(input: &mut u32) -> Self {
         return Self {
             data: [
-                (Self::rand_f32_nd(input) * 2.0) - 1.0,
-                (Self::rand_f32_nd(input) * 2.0) - 1.0,
-                (Self::rand_f32_nd(input) * 2.0) - 1.0,
+                Self::rand_f32_nd(input),
+                Self::rand_f32_nd(input),
+                Self::rand_f32_nd(input),
             ],
         }
         .normalized();

@@ -22,9 +22,13 @@ impl Triangle {
 
     pub fn mid(&self) -> Vec3 {
         return Vec3::from_array(
-            Vec3::sub(
-                self.vertices[0],
-                Vec3::sub(self.vertices[1], self.vertices[2]),
+            Vec3::new(
+                (self.vertices[0].data[0] + self.vertices[1].data[0] + self.vertices[2].data[0])
+                    / 3.0,
+                (self.vertices[0].data[1] + self.vertices[1].data[1] + self.vertices[2].data[1])
+                    / 3.0,
+                (self.vertices[0].data[2] + self.vertices[1].data[2] + self.vertices[2].data[2])
+                    / 3.0,
             )
             .data,
         );
@@ -57,7 +61,7 @@ impl Model {
     /// Parses a .obj file and optionally a .mtl file, returns a Model.
     /// If mtl_path is None, creates a default material which all triangles then use.
     /// i.e., model.materials will always have a length of at least 1.
-    pub fn load(obj_path: &str, mtl_path: Option<&str>, bvh_depth: usize) -> Model {
+    pub fn load(obj_path: &str, mtl_path: Option<&str>) -> Model {
         let mut model = Model::new();
 
         let binding = fs::read_to_string(obj_path).unwrap();
@@ -197,7 +201,7 @@ impl Model {
             }
         }
 
-        model.bvh = BVH::build(&mut model, bvh_depth);
+        BVH::build(&mut model);
 
         return model;
     }

@@ -13,23 +13,79 @@ impl BVH {
         return Self { nodes: Vec::new() };
     }
 
-    pub fn build(model: &mut Model, depth: usize) -> Self {
-        if depth == 0 {
-            panic!("Can't create a BVH with depth of 0");
-        }
-
+    pub fn build(model: &mut Model) {
         let mut bvh = Self::new();
         let mut root = Node::default();
         for tri in &model.tris {
             root.grow_by_tri(tri);
-            root.num_tris += 1;
         }
-        root.children_id = 1;
+        root.num_tris = model.tris.len();
         bvh.nodes.push(root);
 
-        // TODO: Here goes the *actual* BVH generation
+        Self::split_node(0, &mut bvh, model);
 
-        return bvh;
+        print!("\nBVH length:\t{}\n", bvh.nodes.len());
+
+        model.bvh = bvh;
+    }
+
+    fn split_node(index: usize, bvh: &mut Self, model: &mut Model) {
+        let used_nodes = bvh.nodes.len();
+        let node = bvh.nodes.get_mut(index).unwrap();
+
+        // 4 triangles seems to be a good number for now
+        if node.num_tris <= 4 {
+            return;
+        }
+
+        let mut a = Node::default();
+        let mut b = Node::default();
+
+        let extent = Vec3::sub(node.bounds_max, node.bounds_min);
+        let mut split_axis: usize = 0;
+        if extent.data[1] > extent.data[0] {
+            split_axis = 1;
+        } else if extent.data[2] > extent.data[split_axis] {
+            split_axis = 2;
+        }
+        let split_pos = (node.bounds_min.data[split_axis] + node.bounds_max.data[split_axis]) * 0.5;
+
+        // Sort triangles
+        let mut i: usize = node.first_tri_id;
+        let mut j: usize = i + node.num_tris - 1;
+        while i <= j {
+            if model.tris[i].mid().data[split_axis] < split_pos {
+                i += 1;
+            } else {
+                model.tris.swap(i, j);
+                j -= 1;
+            }
+        }
+
+        let a_count = i - node.first_tri_id;
+        if a_count == 0 || a_count == node.num_tris {
+            return;
+        }
+
+        a.first_tri_id = node.first_tri_id;
+        a.num_tris = a_count;
+        b.first_tri_id = i;
+        b.num_tris = node.num_tris - a_count;
+        node.children_id = used_nodes;
+        node.num_tris = 0;
+
+        for i in 0..a.num_tris {
+            a.grow_by_tri(&model.tris[a.first_tri_id + i]);
+        }
+        for i in 0..b.num_tris {
+            b.grow_by_tri(&model.tris[b.first_tri_id + i]);
+        }
+
+        bvh.nodes.push(a);
+        bvh.nodes.push(b);
+
+        Self::split_node(used_nodes, bvh, model);
+        Self::split_node(used_nodes + 1, bvh, model);
     }
 }
 
@@ -62,19 +118,5 @@ impl Node {
                 self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.data[i]);
             }
         });
-    }
-
-    /// Used for determining the axis on which to split a node when generating the BVH
-    fn longest_axis(&self) -> usize {
-        let axis: usize;
-        let extent = Vec3::add(Vec3::abs(self.bounds_min), Vec3::abs(self.bounds_max));
-        if extent.data[1] > extent.data[0] {
-            axis = 1;
-        } else if extent.data[2] > extent.data[1] {
-            axis = 2;
-        } else {
-            axis = 0;
-        }
-        return axis;
     }
 }
