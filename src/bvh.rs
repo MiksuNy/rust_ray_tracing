@@ -18,11 +18,13 @@ impl BVH {
         let mut root = Node::default();
         for tri in &model.tris {
             root.grow_by_tri(tri);
-            root.num_tris += 1;
         }
+        root.num_tris = model.tris.len();
         bvh.nodes.push(root);
 
         Self::split_node(0, &mut bvh, model);
+
+        print!("\nBVH length:\t{}\n", bvh.nodes.len());
 
         model.bvh = bvh;
     }
@@ -30,7 +32,9 @@ impl BVH {
     fn split_node(index: usize, bvh: &mut Self, model: &mut Model) {
         let used_nodes = bvh.nodes.len();
         let node = bvh.nodes.get_mut(index).unwrap();
-        if node.num_tris <= 2 {
+
+        // 4 triangles seems to be a good number for now
+        if node.num_tris <= 4 {
             return;
         }
 
@@ -44,8 +48,9 @@ impl BVH {
         } else if extent.data[2] > extent.data[split_axis] {
             split_axis = 2;
         }
-        let split_pos = (node.bounds_min.data[split_axis] + extent.data[split_axis]) / 2.0;
+        let split_pos = (node.bounds_min.data[split_axis] + node.bounds_max.data[split_axis]) * 0.5;
 
+        // Sort triangles
         let mut i: usize = node.first_tri_id;
         let mut j: usize = i + node.num_tris - 1;
         while i <= j {

@@ -99,7 +99,27 @@ impl Ray {
         }
     }
 
-    pub fn trace(ray: &mut Self, max_bounces: usize, model: &Model, rng_state: &mut u32) -> Vec3 {
+    fn debug_bvh(ray: &Self, model: &Model, index: usize, debug_color: &mut Vec3) {
+        let node = model.bvh.nodes[index];
+        if !Self::intersect_node(ray, &node) {
+            return;
+        }
+
+        if node.num_tris > 0 {
+            *debug_color = Vec3::add(*debug_color, Vec3::new(0.05, 0.0, 0.0));
+        } else {
+            Self::debug_bvh(ray, model, node.children_id, debug_color);
+            Self::debug_bvh(ray, model, node.children_id + 1, debug_color);
+        }
+    }
+
+    pub fn trace(
+        ray: &mut Self,
+        max_bounces: usize,
+        model: &Model,
+        rng_state: &mut u32,
+        debug_bvh: bool,
+    ) -> Vec3 {
         let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
@@ -108,7 +128,13 @@ impl Ray {
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
 
-            Self::traverse_bvh(ray, model, 0, &mut hit_info);
+            // Early return here because BVH visualization doesn't need more than one bounce
+            if debug_bvh {
+                Self::debug_bvh(ray, model, 0, &mut incoming_light);
+                return incoming_light;
+            } else {
+                Self::traverse_bvh(ray, model, 0, &mut hit_info);
+            }
 
             if hit_info.has_hit {
                 let hit_material = &model.materials[hit_info.hit_material_id];
@@ -125,7 +151,7 @@ impl Ray {
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.9, 0.9, 0.9);
+                let sky_color = Vec3::new(0.8, 0.8, 0.8);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
 

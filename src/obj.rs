@@ -22,9 +22,13 @@ impl Triangle {
 
     pub fn mid(&self) -> Vec3 {
         return Vec3::from_array(
-            Vec3::sub(
-                self.vertices[0],
-                Vec3::sub(self.vertices[1], self.vertices[2]),
+            Vec3::new(
+                (self.vertices[0].data[0] + self.vertices[1].data[0] + self.vertices[2].data[0])
+                    / 3.0,
+                (self.vertices[0].data[1] + self.vertices[1].data[1] + self.vertices[2].data[1])
+                    / 3.0,
+                (self.vertices[0].data[2] + self.vertices[1].data[2] + self.vertices[2].data[2])
+                    / 3.0,
             )
             .data,
         );
