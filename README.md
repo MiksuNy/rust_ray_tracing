@@ -11,5 +11,8 @@ Todo:
 - Better support for .obj models (textures, normals)
 - Better BVH
 
-![~250K triangles, 20 spp, 5 max bounces, 1920x1080, ~114 seconds to render](suzanne_250k.png)
-![Same model with debug visualization of the BVH](suzanne_250k_debug.png)
+~250K triangles, 20 spp, 5 max bounces, 1920x1080, ~114 seconds to render
+![](suzanne_250k.png)
+Same model with debug visualization of the BVH
+![](suzanne_250k_debug.png)
+![](lucy.png)
