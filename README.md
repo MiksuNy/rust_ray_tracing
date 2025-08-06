@@ -8,8 +8,14 @@ Features:
 
 Todo:
 - Support for other image formats (at least .bmp, maybe .png)
-- Better support for .obj models (textures, normals)
+- 3D models
+    - Better support for .obj files (textures, normals) OR
+    - Just use glTF format for camera support, better PBR materials etc.
 - Better BVH
+- Multithreaded rendering
+
+Todo (maybe):
+- Windowing and GUI for realtime editing of rendering parameters etc.
 
 ~250K triangles, 20 spp, 5 max bounces, 1920x1080, ~114 seconds to render
 ![](suzanne_250k.png)
