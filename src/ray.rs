@@ -14,6 +14,7 @@ struct HitInfo {
     hit_normal: Vec3,
     hit_distance: f32,
     hit_material_id: usize,
+    front_face: bool,
 }
 
 impl Default for HitInfo {
@@ -24,6 +25,7 @@ impl Default for HitInfo {
             hit_normal: Vec3::default(),
             hit_distance: f32::MAX,
             hit_material_id: 0,
+            front_face: false,
         };
     }
 }
@@ -67,6 +69,7 @@ impl Ray {
             hit_normal: normal,
             hit_distance: t,
             hit_material_id: tri.material_id,
+            front_face: front_face,
         };
     }
 
@@ -113,6 +116,11 @@ impl Ray {
         }
     }
 
+    fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
+        let f_0 = f32::powi(ior - 1.0, 2) / f32::powi(ior + 1.0, 2);
+        return f_0 + (1.0 - f_0) * f32::powi(1.0 - n_dot_v, 5);
+    }
+
     pub fn trace(
         ray: &mut Self,
         max_bounces: usize,
@@ -138,25 +146,32 @@ impl Ray {
 
             if hit_info.has_hit {
                 let hit_material = &model.materials[hit_info.hit_material_id];
+                let ior: f32;
+                if hit_info.front_face {
+                    ior = 1.0 / hit_material.ior;
+                } else {
+                    ior = hit_material.ior;
+                }
 
-                let new_dir = Vec3::rand_in_unit_hemisphere(rng_state, hit_info.hit_normal);
+                // Lambertian diffuse
+                let new_dir = Vec3::add(hit_info.hit_normal, Vec3::rand_in_unit_sphere(rng_state))
+                    .normalized();
+
                 *ray = Self::new(
                     Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.0001)),
                     new_dir,
                 );
 
                 emitted_light = Vec3::add(emitted_light, hit_material.emission);
-                ray_color = Vec3::mul(ray_color, hit_material.diffuse_color);
                 incoming_light = Vec3::add(incoming_light, Vec3::mul(emitted_light, ray_color));
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.8, 0.8, 0.8);
+                let sky_color = Vec3::new(1.0, 1.0, 1.0);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
 
                 curr_bounces += 1;
-
                 break;
             }
         }

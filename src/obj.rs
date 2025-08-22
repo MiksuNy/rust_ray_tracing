@@ -38,8 +38,26 @@ impl Triangle {
 #[derive(Clone)]
 pub struct Material {
     pub name: String,
-    pub diffuse_color: Vec3,
+    pub base_color: Vec3,
     pub emission: Vec3,
+    pub transmission: Vec3,
+    pub ior: f32,
+    pub roughness: f32,
+    pub metallic: f32,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        return Self {
+            name: String::from("default_material"),
+            base_color: Vec3::new(0.8, 0.8, 0.8),
+            emission: Vec3::new(0.0, 0.0, 0.0),
+            transmission: Vec3::new(0.0, 0.0, 0.0),
+            ior: 1.45,
+            roughness: 0.5,
+            metallic: 0.0,
+        };
+    }
 }
 
 #[derive(Clone)]
@@ -64,10 +82,19 @@ impl Model {
     pub fn load(obj_path: &str, mtl_path: Option<&str>) -> Model {
         let mut model = Model::new();
 
-        let binding = fs::read_to_string(obj_path).unwrap();
-        let lines = binding.lines();
+        // Read the .mtl file or create a default material for all tris
+        if mtl_path.is_some() {
+            model.materials = Self::load_mtl(mtl_path.unwrap());
+        } else {
+            model.materials.push(Material::default());
+        }
 
-        // Make temporary buffers for all vertex information so we can construct the vertices later.
+        let binding = fs::read_to_string(obj_path).unwrap();
+        let lines = binding
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("#"));
+
+        // Make temporary buffers for all vertex information so we can construct the vertices later
         let mut position_buffer: Vec<[f32; 3]> = Vec::new();
         let mut tex_coord_buffer: Vec<[f32; 2]> = Vec::new();
         let mut normal_buffer: Vec<[f32; 3]> = Vec::new();
@@ -121,29 +148,17 @@ impl Model {
             }
         }
 
-        // Read the .mtl file or create a default material for all tris
-        if mtl_path.is_some() {
-            model.materials = Self::load_mtl(mtl_path.unwrap());
-        } else {
-            model.materials.push(Material {
-                name: String::from("default_material"),
-                diffuse_color: Vec3::new(0.5, 0.5, 0.5),
-                emission: Vec3::new(0.0, 0.0, 0.0),
-            });
-        }
-
         // Indices
         let mut i_lines = lines.clone();
         let mut active_material_id: usize = 0;
         loop {
-            let line = i_lines.next();
-            if line.is_none() {
+            let Some(line) = i_lines.next() else {
                 break;
-            }
+            };
 
-            match line.unwrap().split_whitespace().nth(0).unwrap() {
+            match line.split_whitespace().nth(0).unwrap() {
                 "usemtl" => {
-                    let name = line.unwrap().strip_prefix("usemtl ").unwrap();
+                    let name = line.strip_prefix("usemtl ").unwrap();
                     active_material_id = model
                         .materials
                         .iter()
@@ -151,7 +166,7 @@ impl Model {
                         .unwrap_or(0);
                 }
                 "f" => {
-                    let stripped = line.unwrap().strip_prefix("f ").unwrap();
+                    let stripped = line.strip_prefix("f ").unwrap();
 
                     let mut position_indices: [usize; 3] = [0; 3];
                     let mut tex_coord_indices: [usize; 3] = [0; 3];
@@ -213,18 +228,12 @@ impl Model {
         let mut lines = binding.lines().peekable();
 
         loop {
-            if lines.peek().is_none() {
+            let Some(line) = lines.next() else {
                 break;
-            }
-
-            let line = lines.next().unwrap();
+            };
 
             if line.contains("newmtl") {
-                let mut material = Material {
-                    name: String::new(),
-                    diffuse_color: Vec3::from_f32(0.0),
-                    emission: Vec3::from_f32(0.0),
-                };
+                let mut material = Material::default();
                 material.name = line.strip_prefix("newmtl ").unwrap().to_string();
 
                 loop {
@@ -233,25 +242,35 @@ impl Model {
                     }
 
                     let mut attribute = lines.next().unwrap().split_whitespace();
-                    let prefix = attribute.nth(0);
-                    if prefix.is_none() {
+                    // Consume the prefix so we can iterate only the data later
+                    let Some(prefix) = attribute.nth(0) else {
                         break;
-                    }
+                    };
 
-                    match prefix.unwrap() {
+                    match prefix {
                         "Kd" => {
-                            let mut data = [0.0f32; 3];
-                            attribute.clone().enumerate().for_each(|(i, val)| {
-                                data[i] = val.parse().unwrap();
+                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                material.base_color.data[i] = val.parse().unwrap();
                             });
-                            material.diffuse_color = Vec3::from_array(data);
                         }
                         "Ke" => {
-                            let mut data = [0.0f32; 3];
-                            attribute.clone().enumerate().for_each(|(i, val)| {
-                                data[i] = val.parse().unwrap();
+                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                material.emission.data[i] = val.parse().unwrap();
                             });
-                            material.emission = Vec3::from_array(data);
+                        }
+                        "Ni" => {
+                            material.ior = attribute.next().unwrap().parse().unwrap();
+                        }
+                        "Pr" => {
+                            material.roughness = attribute.next().unwrap().parse().unwrap();
+                        }
+                        "Pm" => {
+                            material.metallic = attribute.next().unwrap().parse().unwrap();
+                        }
+                        "Tf" => {
+                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                material.transmission.data[i] = val.parse().unwrap();
+                            });
                         }
                         _ => continue,
                     }
