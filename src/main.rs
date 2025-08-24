@@ -1,11 +1,11 @@
-use crate::obj::Model;
 use crate::ray::Ray;
+use crate::scene::Model;
 use crate::vec3::Vec3;
 use std::io::Write;
 
 mod bvh;
-mod obj;
 mod ray;
+mod scene;
 mod vec3;
 
 const WIDTH: u32 = 1920;
