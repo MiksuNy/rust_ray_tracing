@@ -1,5 +1,6 @@
 use crate::Vec3;
 use crate::bvh::BVH;
+use crate::scene::obj::Obj;
 use std::fs;
 
 /// Representation of a 3D scene for use in the ray tracer.
@@ -18,223 +19,20 @@ impl Scene {
             bvh: BVH::new(),
         };
     }
-
-    /// Parses a .obj file and optionally a .mtl file, returns a Model.
-    /// If mtl_path is None, creates a default material which all triangles then use.
-    /// i.e., model.materials will always have a length of at least 1.
-    pub fn load(path: &str) -> Model {
-        let mut model = Model::new();
-
-        // Read the .mtl file or create a default material for all tris
-        if mtl_path.is_some() {
-            model.materials = Self::load_mtl(mtl_path.unwrap());
-        } else {
-            model.materials.push(Material::default());
-        }
-
-        let binding = fs::read_to_string(obj_path).unwrap();
-        let lines = binding
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("#"));
-
-        // Make temporary buffers for all vertex information so we can construct the vertices later
-        let mut position_buffer: Vec<[f32; 3]> = Vec::new();
-        let mut tex_coord_buffer: Vec<[f32; 2]> = Vec::new();
-        let mut normal_buffer: Vec<[f32; 3]> = Vec::new();
-
-        // Vertices
-        let mut v_lines = lines.clone();
-        loop {
-            let line = v_lines.next();
-            if line.is_none() {
-                break;
-            }
-
-            match line.unwrap().split_whitespace().nth(0).unwrap() {
-                "v" => {
-                    let mut data = [0.0f32; 3];
-                    line.unwrap()
-                        .strip_prefix("v ")
-                        .unwrap()
-                        .split_whitespace()
-                        .enumerate()
-                        .for_each(|(i, val)| {
-                            data[i] = val.parse().unwrap();
-                        });
-                    position_buffer.push(data);
-                }
-                "vt" => {
-                    let mut data = [0.0f32; 2];
-                    line.unwrap()
-                        .strip_prefix("vt ")
-                        .unwrap()
-                        .split_whitespace()
-                        .enumerate()
-                        .for_each(|(i, val)| {
-                            data[i] = val.parse().unwrap();
-                        });
-                    tex_coord_buffer.push(data);
-                }
-                "vn" => {
-                    let mut data = [0.0f32; 3];
-                    line.unwrap()
-                        .strip_prefix("vn ")
-                        .unwrap()
-                        .split_whitespace()
-                        .enumerate()
-                        .for_each(|(i, val)| {
-                            data[i] = val.parse().unwrap();
-                        });
-                    normal_buffer.push(data);
-                }
-                _ => (),
-            }
-        }
-
-        // Indices
-        let mut i_lines = lines.clone();
-        let mut active_material_id: usize = 0;
-        loop {
-            let Some(line) = i_lines.next() else {
-                break;
-            };
-
-            match line.split_whitespace().nth(0).unwrap() {
-                "usemtl" => {
-                    let name = line.strip_prefix("usemtl ").unwrap();
-                    active_material_id = model
-                        .materials
-                        .iter()
-                        .position(|mtl| mtl.name.as_str() == name)
-                        .unwrap_or(0);
-                }
-                "f" => {
-                    let stripped = line.strip_prefix("f ").unwrap();
-
-                    let mut position_indices: [usize; 3] = [0; 3];
-                    let mut tex_coord_indices: [usize; 3] = [0; 3];
-                    let mut normal_indices: [usize; 3] = [0; 3];
-
-                    if stripped.contains("//") {
-                        let split = stripped.split_whitespace().enumerate();
-                        for (id, group) in split {
-                            group.split("//").enumerate().for_each(|(i, val)| {
-                                match i {
-                                    0 => position_indices[id] = val.parse::<usize>().unwrap() - 1,
-                                    1 => normal_indices[id] = val.parse::<usize>().unwrap() - 1,
-                                    _ => (),
-                                };
-                            });
-                        }
-                    } else if stripped.contains("/") {
-                        let split = stripped.split_whitespace().enumerate();
-                        for (id, group) in split {
-                            group.split("/").enumerate().for_each(|(i, val)| {
-                                match i {
-                                    0 => position_indices[id] = val.parse::<usize>().unwrap() - 1,
-                                    1 => tex_coord_indices[id] = val.parse::<usize>().unwrap() - 1,
-                                    2 => normal_indices[id] = val.parse::<usize>().unwrap() - 1,
-                                    _ => (),
-                                };
-                            });
-                        }
-                    } else {
-                        stripped
-                            .split_whitespace()
-                            .enumerate()
-                            .for_each(|(i, val)| {
-                                position_indices[i] = val.parse::<usize>().unwrap() - 1
-                            });
-                    }
-
-                    let tri = Triangle::new(
-                        position_buffer[position_indices[0]],
-                        position_buffer[position_indices[1]],
-                        position_buffer[position_indices[2]],
-                        active_material_id,
-                    );
-                    model.tris.push(tri);
-                }
-                _ => (),
-            }
-        }
-
-        BVH::build(&mut model);
-
-        return model;
-    }
-
-    fn load_mtl(file_path: &str) -> Vec<Material> {
-        let mut material_buffer: Vec<Material> = Vec::new();
-
-        let binding = fs::read_to_string(file_path).unwrap();
-        let mut lines = binding.lines().peekable();
-
-        loop {
-            let Some(line) = lines.next() else {
-                break;
-            };
-
-            if line.contains("newmtl") {
-                let mut material = Material::default();
-                material.name = line.strip_prefix("newmtl ").unwrap().to_string();
-
-                loop {
-                    if lines.peek().is_none() {
-                        break;
-                    }
-
-                    let mut attribute = lines.next().unwrap().split_whitespace();
-                    // Consume the prefix so we can iterate only the data later
-                    let Some(prefix) = attribute.nth(0) else {
-                        break;
-                    };
-
-                    match prefix {
-                        "Kd" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
-                                material.base_color.data[i] = val.parse().unwrap();
-                            });
-                        }
-                        "Ke" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
-                                material.emission.data[i] = val.parse().unwrap();
-                            });
-                        }
-                        "Ni" => {
-                            material.ior = attribute.next().unwrap().parse().unwrap();
-                        }
-                        "Pr" => {
-                            material.roughness = attribute.next().unwrap().parse().unwrap();
-                        }
-                        "Pm" => {
-                            material.metallic = attribute.next().unwrap().parse().unwrap();
-                        }
-                        "Tf" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
-                                material.transmission.data[i] = val.parse().unwrap();
-                            });
-                        }
-                        _ => continue,
-                    }
-                }
-
-                material_buffer.push(material);
-            }
-        }
-
-        return material_buffer;
-    }
 }
 
-#[derive(Default)]
+impl From<Obj> for Scene {
+    fn from(value: Obj) -> Self {}
+}
+
+#[derive(Clone, Copy, Default)]
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
     tex_coord: [f32; 2],
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Triangle {
     pub vertices: [Vertex; 3],
     pub material_id: usize,
@@ -296,20 +94,18 @@ impl Default for Material {
 
 /// Worst .obj parser ever
 mod obj {
-    // TODO: Triangles may be specified with negative indices (WHY???) in the .obj format, this isn't handled
-    // properly yet when parsing.
-
     use crate::scene::Material;
     use std::str::FromStr;
 
     #[derive(Default)]
-    struct Obj {
+    pub struct Obj {
         tris: Vec<Triangle>,
+        vertex_buffer: VertexBuffer,
         materials: Vec<Material>,
     }
 
     impl Obj {
-        fn load(path: &str) -> Self {
+        pub fn load(path: &str) -> Self {
             let Ok(buffer) = std::fs::read_to_string(path) else {
                 panic!("Could not read .obj file at: '{path}'");
             };
@@ -320,7 +116,9 @@ mod obj {
             let mut tris: Vec<Triangle> = Vec::new();
             let materials: Vec<Material>;
 
-            let mtl_lib = lines.find(|line| line.trim_start().starts_with("mtllib"));
+            let mtl_lib = lines
+                .clone()
+                .find(|line| line.trim_start().starts_with("mtllib"));
             if mtl_lib.is_some() {
                 let mtl_path = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
                 materials = Self::load_mtl(mtl_path);
@@ -328,10 +126,9 @@ mod obj {
                 materials = vec![Material::default()];
             }
 
-            // Would be nice if this could be simplified to just a single function call like
-            // triangles but oh well, maybe later idk
+            // Vertices
             let mut vertex_buffer = VertexBuffer::default();
-            lines.for_each(|line| {
+            lines.clone().for_each(|line| {
                 let mut split = line.split_whitespace();
                 match split.nth(0).unwrap() {
                     "v" => {
@@ -365,12 +162,92 @@ mod obj {
                 if line.trim_start().starts_with("usemtl ") {
                     active_material_id = materials
                         .iter()
-                        .position(|mtl| mtl.name == line.strip_prefix("usemtl ").unwrap());
+                        .position(|mtl| mtl.name == line.strip_prefix("usemtl ").unwrap())
+                        .unwrap();
+                } else if line.trim_start().starts_with("f ") {
+                    let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
+                    tri.material_id = active_material_id;
+                    tris.push(tri);
                 }
             }
+
+            // TODO: If vertex normals are not present in the .obj file, we should probably
+            // precalculate them from the positions anyway at this point.
+
+            return Obj {
+                tris,
+                vertex_buffer,
+                materials,
+            };
         }
 
-        fn load_mtl(path: &str) -> Vec<Material> {}
+        // TODO: Refactor this to be more like the .obj loading function.
+        fn load_mtl(path: &str) -> Vec<Material> {
+            let mut material_buffer: Vec<Material> = Vec::new();
+
+            let Ok(buffer) = std::fs::read_to_string(path) else {
+                panic!("Could not read .mtl file at: '{path}'");
+            };
+            let mut lines = buffer
+                .lines()
+                .filter(|line| line.trim_start().starts_with("#"))
+                .peekable();
+
+            loop {
+                let Some(line) = lines.next() else {
+                    break;
+                };
+
+                if line.contains("newmtl") {
+                    let mut material = Material::default();
+                    material.name = line.strip_prefix("newmtl ").unwrap().to_string();
+
+                    loop {
+                        if lines.peek().is_none() {
+                            break;
+                        }
+
+                        let mut attribute = lines.next().unwrap().split_whitespace();
+                        // Consume the prefix so we can iterate only the data later
+                        let Some(prefix) = attribute.nth(0) else {
+                            break;
+                        };
+
+                        match prefix {
+                            "Kd" => {
+                                attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                    material.base_color.data[i] = val.parse().unwrap();
+                                });
+                            }
+                            "Ke" => {
+                                attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                    material.emission.data[i] = val.parse().unwrap();
+                                });
+                            }
+                            "Ni" => {
+                                material.ior = attribute.next().unwrap().parse().unwrap();
+                            }
+                            "Pr" => {
+                                material.roughness = attribute.next().unwrap().parse().unwrap();
+                            }
+                            "Pm" => {
+                                material.metallic = attribute.next().unwrap().parse().unwrap();
+                            }
+                            "Tf" => {
+                                attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                    material.transmission.data[i] = val.parse().unwrap();
+                                });
+                            }
+                            _ => continue,
+                        }
+                    }
+
+                    material_buffer.push(material);
+                }
+            }
+
+            return material_buffer;
+        }
     }
 
     #[derive(Default)]
@@ -386,6 +263,7 @@ mod obj {
         positions: [usize; 3],
         tex_coords: [usize; 3],
         normals: [usize; 3],
+        material_id: usize,
     }
 
     #[derive(Debug, PartialEq, Eq)]
@@ -405,23 +283,25 @@ mod obj {
 
             let vertices = s.split_whitespace();
 
+            // TODO: Triangles may be specified with negative indices (WHY???) in the .obj format, this isn't handled
+            // properly yet when parsing.
             for (vertex_id, vertex) in vertices.enumerate() {
                 if vertex.contains("//") {
                     vertex.split("//").enumerate().for_each(|(i, str)| match i {
-                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap(),
-                        1 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap(),
+                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        1 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
                         _ => (),
                     });
                 } else if vertex.contains("/") {
                     vertex.split("/").enumerate().for_each(|(i, str)| match i {
-                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap(),
-                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap(),
-                        2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap(),
+                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
                         _ => (),
                     });
                 } else {
                     vertex.split(" ").for_each(|str| {
-                        triangle.positions[vertex_id] = str.parse::<usize>().unwrap()
+                        triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1
                     });
                 }
             }
