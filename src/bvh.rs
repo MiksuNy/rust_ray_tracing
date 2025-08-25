@@ -1,35 +1,31 @@
 use crate::{
-    obj::{Model, Triangle},
+    scene::{Scene, Triangle},
     vec3::Vec3,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BVH {
     pub nodes: Vec<Node>,
 }
 
 impl BVH {
-    pub fn new() -> Self {
-        return Self { nodes: Vec::new() };
-    }
-
-    pub fn build(model: &mut Model) {
-        let mut bvh = Self::new();
+    pub fn build(scene: &mut Scene) {
+        let mut bvh = Self::default();
         let mut root = Node::default();
-        for tri in &model.tris {
+        for tri in &scene.tris {
             root.grow_by_tri(tri);
         }
-        root.num_tris = model.tris.len();
+        root.num_tris = scene.tris.len();
         bvh.nodes.push(root);
 
-        Self::split_node(0, &mut bvh, model);
+        Self::split_node(0, &mut bvh, scene);
 
         print!("\nBVH length:\t{}\n", bvh.nodes.len());
 
-        model.bvh = bvh;
+        scene.bvh = bvh;
     }
 
-    fn split_node(index: usize, bvh: &mut Self, model: &mut Model) {
+    fn split_node(index: usize, bvh: &mut Self, scene: &mut Scene) {
         let used_nodes = bvh.nodes.len();
         let node = bvh.nodes.get_mut(index).unwrap();
 
@@ -54,10 +50,10 @@ impl BVH {
         let mut i: usize = node.first_tri_id;
         let mut j: usize = i + node.num_tris - 1;
         while i <= j {
-            if model.tris[i].mid().data[split_axis] < split_pos {
+            if scene.tris[i].mid().data[split_axis] < split_pos {
                 i += 1;
             } else {
-                model.tris.swap(i, j);
+                scene.tris.swap(i, j);
                 j -= 1;
             }
         }
@@ -75,17 +71,17 @@ impl BVH {
         node.num_tris = 0;
 
         for i in 0..a.num_tris {
-            a.grow_by_tri(&model.tris[a.first_tri_id + i]);
+            a.grow_by_tri(&scene.tris[a.first_tri_id + i]);
         }
         for i in 0..b.num_tris {
-            b.grow_by_tri(&model.tris[b.first_tri_id + i]);
+            b.grow_by_tri(&scene.tris[b.first_tri_id + i]);
         }
 
         bvh.nodes.push(a);
         bvh.nodes.push(b);
 
-        Self::split_node(used_nodes, bvh, model);
-        Self::split_node(used_nodes + 1, bvh, model);
+        Self::split_node(used_nodes, bvh, scene);
+        Self::split_node(used_nodes + 1, bvh, scene);
     }
 }
 
@@ -101,8 +97,8 @@ pub struct Node {
 impl Default for Node {
     fn default() -> Self {
         return Self {
-            bounds_min: Vec3::from_f32(f32::MAX),
-            bounds_max: Vec3::from_f32(-f32::MAX),
+            bounds_min: Vec3::from(f32::MAX),
+            bounds_max: Vec3::from(-f32::MAX),
             children_id: 0,
             first_tri_id: 0,
             num_tris: 0,
@@ -114,8 +110,8 @@ impl Node {
     fn grow_by_tri(&mut self, tri: &Triangle) {
         tri.vertices.iter().for_each(|vert| {
             for i in 0..3 {
-                self.bounds_min.data[i] = f32::min(self.bounds_min.data[i], vert.data[i]);
-                self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.data[i]);
+                self.bounds_min.data[i] = f32::min(self.bounds_min.data[i], vert.position[i]);
+                self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position[i]);
             }
         });
     }

@@ -1,5 +1,5 @@
 use crate::ray::Ray;
-use crate::scene::Model;
+use crate::scene::Scene;
 use crate::vec3::Vec3;
 use std::io::Write;
 
@@ -8,8 +8,8 @@ mod ray;
 mod scene;
 mod vec3;
 
-const WIDTH: u32 = 1920;
-const HEIGHT: u32 = 1080;
+const WIDTH: u32 = 640;
+const HEIGHT: u32 = 480;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
 const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 4;
@@ -28,7 +28,7 @@ fn main() {
         .unwrap();
     let _ = output_file.write_fmt(format_args!("P3\n{} {}\n255\n", WIDTH, HEIGHT));
 
-    let model = Model::load("../res/cornell_box.obj", Some("../res/cornell_box.mtl"));
+    let model = Scene::load_from_obj("../res/cornell_box.obj");
 
     let start_time = std::time::Instant::now();
 
@@ -61,7 +61,7 @@ fn main() {
                 }
             }
 
-            final_color = Vec3::div(final_color, Vec3::from_f32(SAMPLE_COUNT as f32));
+            final_color = Vec3::div(final_color, Vec3::from(SAMPLE_COUNT as f32));
             final_color = Vec3::linear_to_gamma(final_color);
 
             for c in final_color.to_color() {

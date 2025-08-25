@@ -10,14 +10,6 @@ impl Vec3 {
         return Self { data: [x, y, z] };
     }
 
-    pub fn from_array(data: [f32; 3]) -> Self {
-        return Self { data };
-    }
-
-    pub fn from_f32(f: f32) -> Self {
-        return Self { data: [f, f, f] };
-    }
-
     pub fn to_color(self) -> [u32; 3] {
         return [
             f32::floor(self.data[0] * 255.0).clamp(0.0, 255.0) as u32,
@@ -227,5 +219,19 @@ impl Vec3 {
 impl Display for Vec3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {}, {})", self.data[0], self.data[1], self.data[2])
+    }
+}
+
+impl From<f32> for Vec3 {
+    fn from(value: f32) -> Self {
+        return Self {
+            data: [value, value, value],
+        };
+    }
+}
+
+impl From<[f32; 3]> for Vec3 {
+    fn from(value: [f32; 3]) -> Self {
+        return Self { data: value };
     }
 }

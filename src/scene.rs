@@ -4,7 +4,7 @@ use crate::scene::obj::Obj;
 use std::fs;
 
 /// Representation of a 3D scene for use in the ray tracer.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Scene {
     pub tris: Vec<Triangle>,
     pub materials: Vec<Material>,
@@ -12,24 +12,49 @@ pub struct Scene {
 }
 
 impl Scene {
-    fn new() -> Self {
-        return Self {
-            tris: Vec::new(),
-            materials: Vec::new(),
-            bvh: BVH::new(),
-        };
+    pub fn load_from_obj(path: &str) -> Self {
+        let obj = Obj::load(path);
+        return Scene::from(obj);
     }
 }
 
 impl From<Obj> for Scene {
-    fn from(value: Obj) -> Self {}
+    fn from(obj: Obj) -> Self {
+        let mut scene = Scene::default();
+        for obj_tri in obj.tris {
+            let v_1 = Vertex {
+                position: obj.vertex_buffer.positions[obj_tri.positions[0]],
+                normal: obj.vertex_buffer.normals[obj_tri.normals[0]],
+                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[0]],
+            };
+            let v_2 = Vertex {
+                position: obj.vertex_buffer.positions[obj_tri.positions[1]],
+                normal: obj.vertex_buffer.normals[obj_tri.normals[1]],
+                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[1]],
+            };
+            let v_3 = Vertex {
+                position: obj.vertex_buffer.positions[obj_tri.positions[2]],
+                normal: obj.vertex_buffer.normals[obj_tri.normals[2]],
+                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[2]],
+            };
+            scene
+                .tris
+                .push(Triangle::new([v_1, v_2, v_3], obj_tri.material_id));
+        }
+
+        scene.materials = obj.materials;
+
+        BVH::build(&mut scene);
+
+        return scene;
+    }
 }
 
 #[derive(Clone, Copy, Default)]
-struct Vertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    tex_coord: [f32; 2],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub tex_coord: [f32; 2],
 }
 
 #[derive(Clone, Copy, Default)]
@@ -47,22 +72,19 @@ impl Triangle {
     }
 
     pub fn mid(&self) -> Vec3 {
-        return Vec3::from_array(
-            Vec3::new(
-                (self.vertices[0].position[0]
-                    + self.vertices[1].position[0]
-                    + self.vertices[2].position[0])
-                    / 3.0,
-                (self.vertices[0].position[1]
-                    + self.vertices[1].position[1]
-                    + self.vertices[2].position[1])
-                    / 3.0,
-                (self.vertices[0].position[2]
-                    + self.vertices[1].position[2]
-                    + self.vertices[2].position[2])
-                    / 3.0,
-            )
-            .data,
+        return Vec3::new(
+            (self.vertices[0].position[0]
+                + self.vertices[1].position[0]
+                + self.vertices[2].position[0])
+                / 3.0,
+            (self.vertices[0].position[1]
+                + self.vertices[1].position[1]
+                + self.vertices[2].position[1])
+                / 3.0,
+            (self.vertices[0].position[2]
+                + self.vertices[1].position[2]
+                + self.vertices[2].position[2])
+                / 3.0,
         );
     }
 }
@@ -99,9 +121,9 @@ mod obj {
 
     #[derive(Default)]
     pub struct Obj {
-        tris: Vec<Triangle>,
-        vertex_buffer: VertexBuffer,
-        materials: Vec<Material>,
+        pub tris: Vec<Triangle>,
+        pub vertex_buffer: VertexBuffer,
+        pub materials: Vec<Material>,
     }
 
     impl Obj {
@@ -111,7 +133,7 @@ mod obj {
             };
             let lines = buffer
                 .lines()
-                .filter(|line| line.trim_start().starts_with("#"));
+                .filter(|line| !line.trim_start().starts_with("#"));
 
             let mut tris: Vec<Triangle> = Vec::new();
             let materials: Vec<Material>;
@@ -120,8 +142,11 @@ mod obj {
                 .clone()
                 .find(|line| line.trim_start().starts_with("mtllib"));
             if mtl_lib.is_some() {
-                let mtl_path = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
-                materials = Self::load_mtl(mtl_path);
+                let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
+                let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
+                mtl_path.push('/');
+                mtl_path.push_str(mtl_name);
+                materials = Self::load_mtl(mtl_path.as_str());
             } else {
                 materials = vec![Material::default()];
             }
@@ -190,7 +215,7 @@ mod obj {
             };
             let mut lines = buffer
                 .lines()
-                .filter(|line| line.trim_start().starts_with("#"))
+                .filter(|line| !line.trim_start().starts_with("#"))
                 .peekable();
 
             loop {
@@ -201,6 +226,8 @@ mod obj {
                 if line.contains("newmtl") {
                     let mut material = Material::default();
                     material.name = line.strip_prefix("newmtl ").unwrap().to_string();
+
+                    println!("Found material with name {}", material.name);
 
                     loop {
                         if lines.peek().is_none() {
@@ -251,23 +278,23 @@ mod obj {
     }
 
     #[derive(Default)]
-    struct VertexBuffer {
-        positions: Vec<[f32; 3]>,
-        tex_coords: Vec<[f32; 2]>,
-        normals: Vec<[f32; 3]>,
+    pub struct VertexBuffer {
+        pub positions: Vec<[f32; 3]>,
+        pub tex_coords: Vec<[f32; 2]>,
+        pub normals: Vec<[f32; 3]>,
     }
 
     /// In a .obj file, triangles are represented as indices (f) to a buffer of vertex data (v, vn, vt)
     #[derive(Default)]
-    struct Triangle {
-        positions: [usize; 3],
-        tex_coords: [usize; 3],
-        normals: [usize; 3],
-        material_id: usize,
+    pub struct Triangle {
+        pub positions: [usize; 3],
+        pub tex_coords: [usize; 3],
+        pub normals: [usize; 3],
+        pub material_id: usize,
     }
 
     #[derive(Debug, PartialEq, Eq)]
-    struct ParseObjTriangleError;
+    pub struct ParseObjTriangleError;
 
     impl FromStr for Triangle {
         type Err = ParseObjTriangleError;

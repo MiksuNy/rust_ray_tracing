@@ -1,6 +1,6 @@
 use crate::Vec3;
 use crate::bvh::Node;
-use crate::obj::{Model, Triangle};
+use crate::scene::{Scene, Triangle};
 
 #[derive(Clone, Copy)]
 pub struct Ray {
@@ -36,14 +36,20 @@ impl Ray {
     }
 
     fn intersect_tri(ray: &Self, tri: &Triangle) -> HitInfo {
-        let edge1 = Vec3::sub(tri.vertices[1], tri.vertices[0]);
-        let edge2 = Vec3::sub(tri.vertices[2], tri.vertices[0]);
+        let edge1 = Vec3::sub(
+            Vec3::from(tri.vertices[1].position),
+            Vec3::from(tri.vertices[0].position),
+        );
+        let edge2 = Vec3::sub(
+            Vec3::from(tri.vertices[2].position),
+            Vec3::from(tri.vertices[0].position),
+        );
 
         let ray_cross_e2 = Vec3::cross(ray.direction, edge2);
         let det = Vec3::dot(edge1, ray_cross_e2);
 
         let inv_det = 1.0 / det;
-        let s = Vec3::sub(ray.origin, tri.vertices[0]);
+        let s = Vec3::sub(ray.origin, Vec3::from(tri.vertices[0].position));
         let u = inv_det * Vec3::dot(s, ray_cross_e2);
 
         let s_cross_e1 = Vec3::cross(s, edge1);
@@ -83,27 +89,27 @@ impl Ray {
         return t_near < t_far;
     }
 
-    fn traverse_bvh(ray: &Self, model: &Model, index: usize, hit_info: &mut HitInfo) {
-        let node = model.bvh.nodes[index];
+    fn traverse_bvh(ray: &Self, scene: &Scene, index: usize, hit_info: &mut HitInfo) {
+        let node = scene.bvh.nodes[index];
         if !Self::intersect_node(ray, &node) {
             return;
         }
 
         if node.num_tris > 0 {
             for i in 0..node.num_tris {
-                let temp_hit_info = Self::intersect_tri(ray, &model.tris[node.first_tri_id + i]);
+                let temp_hit_info = Self::intersect_tri(ray, &scene.tris[node.first_tri_id + i]);
                 if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
                     *hit_info = temp_hit_info;
                 }
             }
         } else {
-            Self::traverse_bvh(ray, model, node.children_id, hit_info);
-            Self::traverse_bvh(ray, model, node.children_id + 1, hit_info);
+            Self::traverse_bvh(ray, scene, node.children_id, hit_info);
+            Self::traverse_bvh(ray, scene, node.children_id + 1, hit_info);
         }
     }
 
-    fn debug_bvh(ray: &Self, model: &Model, index: usize, debug_color: &mut Vec3) {
-        let node = model.bvh.nodes[index];
+    fn debug_bvh(ray: &Self, scene: &Scene, index: usize, debug_color: &mut Vec3) {
+        let node = scene.bvh.nodes[index];
         if !Self::intersect_node(ray, &node) {
             return;
         }
@@ -111,8 +117,8 @@ impl Ray {
         if node.num_tris > 0 {
             *debug_color = Vec3::add(*debug_color, Vec3::new(0.05, 0.0, 0.0));
         } else {
-            Self::debug_bvh(ray, model, node.children_id, debug_color);
-            Self::debug_bvh(ray, model, node.children_id + 1, debug_color);
+            Self::debug_bvh(ray, scene, node.children_id, debug_color);
+            Self::debug_bvh(ray, scene, node.children_id + 1, debug_color);
         }
     }
 
@@ -124,7 +130,7 @@ impl Ray {
     pub fn trace(
         ray: &mut Self,
         max_bounces: usize,
-        model: &Model,
+        scene: &Scene,
         rng_state: &mut u32,
         debug_bvh: bool,
     ) -> Vec3 {
@@ -138,14 +144,14 @@ impl Ray {
 
             // Early return here because BVH visualization doesn't need more than one bounce
             if debug_bvh {
-                Self::debug_bvh(ray, model, 0, &mut incoming_light);
+                Self::debug_bvh(ray, scene, 0, &mut incoming_light);
                 return incoming_light;
             } else {
-                Self::traverse_bvh(ray, model, 0, &mut hit_info);
+                Self::traverse_bvh(ray, scene, 0, &mut hit_info);
             }
 
             if hit_info.has_hit {
-                let hit_material = &model.materials[hit_info.hit_material_id];
+                let hit_material = &scene.materials[hit_info.hit_material_id];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
@@ -163,6 +169,7 @@ impl Ray {
                 );
 
                 emitted_light = Vec3::add(emitted_light, hit_material.emission);
+                ray_color = Vec3::mul(ray_color, hit_material.base_color);
                 incoming_light = Vec3::add(incoming_light, Vec3::mul(emitted_light, ray_color));
 
                 curr_bounces += 1;
@@ -176,6 +183,6 @@ impl Ray {
             }
         }
 
-        return Vec3::div(incoming_light, Vec3::from_f32(curr_bounces as f32));
+        return Vec3::div(incoming_light, Vec3::from(curr_bounces as f32));
     }
 }
