@@ -36,34 +36,34 @@ impl Ray {
     }
 
     fn intersect_tri(ray: &Self, tri: &Triangle) -> HitInfo {
-        let edge1 = Vec3::sub(
-            Vec3::from(tri.vertices[1].position),
-            Vec3::from(tri.vertices[0].position),
-        );
-        let edge2 = Vec3::sub(
-            Vec3::from(tri.vertices[2].position),
-            Vec3::from(tri.vertices[0].position),
-        );
+        let v_1 = Vec3::from(tri.vertices[0].position);
+        let v_2 = Vec3::from(tri.vertices[1].position);
+        let v_3 = Vec3::from(tri.vertices[2].position);
 
-        let ray_cross_e2 = Vec3::cross(ray.direction, edge2);
-        let det = Vec3::dot(edge1, ray_cross_e2);
+        let edge_1 = Vec3::sub(v_2, v_1);
+        let edge_2 = Vec3::sub(v_3, v_1);
+
+        let ray_cross_e2 = Vec3::cross(ray.direction, edge_2);
+        let det = Vec3::dot(edge_1, ray_cross_e2);
 
         let inv_det = 1.0 / det;
-        let s = Vec3::sub(ray.origin, Vec3::from(tri.vertices[0].position));
+        let s = Vec3::sub(ray.origin, v_1);
         let u = inv_det * Vec3::dot(s, ray_cross_e2);
 
-        let s_cross_e1 = Vec3::cross(s, edge1);
+        let s_cross_e1 = Vec3::cross(s, edge_1);
         let v = inv_det * Vec3::dot(ray.direction, s_cross_e1);
 
-        let t = inv_det * Vec3::dot(edge2, s_cross_e1);
+        let t = inv_det * Vec3::dot(edge_2, s_cross_e1);
 
         let front_face = det > 0.0;
 
+        let hit_point = Vec3::add(ray.origin, Vec3::mul_by_f32(ray.direction, t));
+
         let normal: Vec3;
         if front_face {
-            normal = Vec3::normalized(Vec3::cross(edge1, edge2));
+            normal = Vec3::normalized(Vec3::cross(edge_1, edge_2));
         } else {
-            normal = Vec3::normalized(Vec3::cross(edge2, edge1));
+            normal = Vec3::normalized(Vec3::cross(edge_2, edge_1));
         }
 
         return HitInfo {
@@ -71,7 +71,7 @@ impl Ray {
                 && !(det < 0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
-            hit_point: Vec3::add(ray.origin, Vec3::mul_by_f32(ray.direction, t)),
+            hit_point: hit_point,
             hit_normal: normal,
             hit_distance: t,
             hit_material_id: tri.material_id,

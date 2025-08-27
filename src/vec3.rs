@@ -26,6 +26,10 @@ impl Vec3 {
         );
     }
 
+    pub fn distance(a: Self, b: Self) -> f32 {
+        return Self::sub(a, b).length();
+    }
+
     pub fn normalized(self) -> Self {
         return Self {
             data: [
@@ -163,6 +167,13 @@ impl Vec3 {
         return Self {
             data: [-self.data[0], -self.data[1], -self.data[2]],
         };
+    }
+
+    pub fn lerp(a: Self, b: Self, amount: f32) -> Self {
+        return Self::add(
+            Self::mul_by_f32(a, 1.0 - amount),
+            Self::mul_by_f32(b, amount),
+        );
     }
 
     fn xor_shift(input: &mut u32) -> u32 {

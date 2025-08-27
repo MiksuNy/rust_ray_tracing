@@ -1,7 +1,6 @@
 use crate::Vec3;
 use crate::bvh::BVH;
 use crate::scene::obj::Obj;
-use std::fs;
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -21,25 +20,19 @@ impl Scene {
 impl From<Obj> for Scene {
     fn from(obj: Obj) -> Self {
         let mut scene = Scene::default();
+
         for obj_tri in obj.tris {
-            let v_1 = Vertex {
-                position: obj.vertex_buffer.positions[obj_tri.positions[0]],
-                normal: obj.vertex_buffer.normals[obj_tri.normals[0]],
-                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[0]],
-            };
-            let v_2 = Vertex {
-                position: obj.vertex_buffer.positions[obj_tri.positions[1]],
-                normal: obj.vertex_buffer.normals[obj_tri.normals[1]],
-                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[1]],
-            };
-            let v_3 = Vertex {
-                position: obj.vertex_buffer.positions[obj_tri.positions[2]],
-                normal: obj.vertex_buffer.normals[obj_tri.normals[2]],
-                tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[2]],
-            };
+            let mut vertices: [Vertex; 3] = [Vertex::default(); 3];
+            for i in 0..3 {
+                vertices[i] = Vertex {
+                    position: obj.vertex_buffer.positions[obj_tri.positions[i]],
+                    normal: obj.vertex_buffer.normals[obj_tri.normals[i]],
+                    tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[i]],
+                };
+            }
             scene
                 .tris
-                .push(Triangle::new([v_1, v_2, v_3], obj_tri.material_id));
+                .push(Triangle::new(vertices, obj_tri.material_id));
         }
 
         scene.materials = obj.materials;
@@ -116,7 +109,7 @@ impl Default for Material {
 
 /// Worst .obj parser ever
 mod obj {
-    use crate::scene::Material;
+    use crate::{scene::Material, vec3::Vec3};
     use std::str::FromStr;
 
     #[derive(Default)]
@@ -196,8 +189,26 @@ mod obj {
                 }
             }
 
-            // TODO: If vertex normals are not present in the .obj file, we should probably
-            // precalculate them from the positions anyway at this point.
+            // Precalculating vertex normals
+            if vertex_buffer.normals.is_empty() {
+                for (i, tri) in tris.iter_mut().enumerate() {
+                    let v_1 = Vec3::from(vertex_buffer.positions[tri.positions[0]]);
+                    let v_2 = Vec3::from(vertex_buffer.positions[tri.positions[1]]);
+                    let v_3 = Vec3::from(vertex_buffer.positions[tri.positions[2]]);
+                    let u = Vec3::sub(v_2, v_1);
+                    let v = Vec3::sub(v_3, v_1);
+                    let n = Vec3::cross(u, v).normalized();
+                    vertex_buffer.normals.push(n.data);
+                    tri.normals[0] = i;
+                    tri.normals[1] = i;
+                    tri.normals[2] = i;
+                }
+            }
+
+            // TODO: Hack, fix this
+            if vertex_buffer.tex_coords.is_empty() {
+                vertex_buffer.tex_coords.push([0.0f32; 2]);
+            }
 
             return Obj {
                 tris,
@@ -226,8 +237,6 @@ mod obj {
                 if line.contains("newmtl") {
                     let mut material = Material::default();
                     material.name = line.strip_prefix("newmtl ").unwrap().to_string();
-
-                    println!("Found material with name {}", material.name);
 
                     loop {
                         if lines.peek().is_none() {
@@ -277,6 +286,7 @@ mod obj {
         }
     }
 
+    /// Used to build final scene triangles from .obj triangles
     #[derive(Default)]
     pub struct VertexBuffer {
         pub positions: Vec<[f32; 3]>,
