@@ -22,3 +22,7 @@ Todo (maybe):
 Same model with debug visualization of the BVH
 ![](suzanne_250k_debug.png)
 ![](lucy.png)
+
+Resources & references:
+- [This book series](https://raytracing.github.io/) is *the* best resource for anyone looking to start their own ray tracer.
+- A huge shout out to [this blog](https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/) for helping me make the BVH system for this project.
