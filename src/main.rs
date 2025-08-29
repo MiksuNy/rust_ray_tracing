@@ -76,7 +76,5 @@ fn main() {
 
     let _ = output_file.write(output_buffer.as_slice());
 
-    let end_time = std::time::Instant::now();
-
-    println!("Rendering took {} ms", (end_time - start_time).as_millis());
+    println!("Rendering took {} ms", start_time.elapsed().as_millis());
 }
