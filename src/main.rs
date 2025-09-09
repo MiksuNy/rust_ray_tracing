@@ -16,7 +16,7 @@ const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 3;
 const DEBUG_BVH: bool = true;
 const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/dragon_5k.obj";
+const OBJ_PATH: &str = "../res/sponza.obj";
 
 fn main() {
     // Initialize the prng to some big value
@@ -37,7 +37,7 @@ fn main() {
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3::new(0.0, 0.2, 1.0),
+                    Vec3::new(0.0, 2.0, 15.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
