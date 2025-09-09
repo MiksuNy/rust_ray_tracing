@@ -37,7 +37,7 @@ impl BVH {
         let mut a = Node::default();
         let mut b = Node::default();
 
-        let extent = Vec3::sub(node.bounds_max, node.bounds_min);
+        let extent = node.extent();
         let mut split_axis: usize = 0;
         if extent.data[1] > extent.data[0] {
             split_axis = 1;
@@ -114,5 +114,15 @@ impl Node {
                 self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position[i]);
             }
         });
+    }
+
+    fn extent(&self) -> Vec3 {
+        return Vec3::sub(self.bounds_max, self.bounds_min);
+    }
+
+    fn surface_area(&self) -> f32 {
+        return 2.0 * (self.extent().data[0] * self.extent().data[2])
+            + 2.0 * (self.extent().data[0] * self.extent().data[1])
+            + 2.0 * (self.extent().data[2] * self.extent().data[1]);
     }
 }
