@@ -10,6 +10,8 @@ pub struct BVH {
 
 impl BVH {
     pub fn build(scene: &mut Scene) {
+        let start_time = std::time::Instant::now();
+
         let mut bvh = Self::default();
         let mut root = Node::default();
         for tri in &scene.tris {
@@ -20,7 +22,11 @@ impl BVH {
 
         Self::split_node(0, &mut bvh, scene);
 
-        print!("\nBVH length:\t{}\n", bvh.nodes.len());
+        println!("BVH length:\t{}", bvh.nodes.len());
+        println!(
+            "BVH took:\t{} ms to build",
+            start_time.elapsed().as_millis()
+        );
 
         scene.bvh = bvh;
     }
@@ -29,22 +35,36 @@ impl BVH {
         let used_nodes = bvh.nodes.len();
         let node = bvh.nodes.get_mut(index).unwrap();
 
-        // 4 triangles seems to be a good number for now
         if node.num_tris <= 4 {
             return;
         }
 
-        let mut a = Node::default();
-        let mut b = Node::default();
+        let parent_cost = node.num_tris as f32 * node.surface_area();
 
-        let extent = Vec3::sub(node.bounds_max, node.bounds_min);
-        let mut split_axis: usize = 0;
-        if extent.data[1] > extent.data[0] {
-            split_axis = 1;
-        } else if extent.data[2] > extent.data[split_axis] {
-            split_axis = 2;
+        // Surface area heuristic
+        const NUM_BINS: usize = 16;
+        let mut best_split_axis: usize = 0;
+        let mut best_split_pos: f32 = 0.0;
+        let mut best_split_cost: f32 = f32::MAX;
+        for split_axis in 0..3 {
+            let scale = node.extent().data[split_axis] / NUM_BINS as f32;
+            for i in 0..NUM_BINS {
+                let split_pos = node.bounds_min.data[split_axis] + i as f32 * scale;
+                let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
+                if split_cost < best_split_cost {
+                    best_split_axis = split_axis;
+                    best_split_pos = split_pos;
+                    best_split_cost = split_cost;
+                }
+            }
         }
-        let split_pos = (node.bounds_min.data[split_axis] + node.bounds_max.data[split_axis]) * 0.5;
+
+        if best_split_cost >= parent_cost {
+            return;
+        }
+
+        let split_axis = best_split_axis;
+        let split_pos = best_split_pos;
 
         // Sort triangles
         let mut i: usize = node.first_tri_id;
@@ -63,6 +83,8 @@ impl BVH {
             return;
         }
 
+        let mut a = Node::default();
+        let mut b = Node::default();
         a.first_tri_id = node.first_tri_id;
         a.num_tris = a_count;
         b.first_tri_id = i;
@@ -82,6 +104,31 @@ impl BVH {
 
         Self::split_node(used_nodes, bvh, scene);
         Self::split_node(used_nodes + 1, bvh, scene);
+    }
+
+    fn evaluate_sah(scene: &Scene, node: &Node, split_axis: usize, split_pos: f32) -> f32 {
+        let mut left = Node::default();
+        let mut right = Node::default();
+
+        for i in 0..node.num_tris {
+            let tri = &scene.tris[node.first_tri_id + i];
+            if tri.mid().data[split_axis] < split_pos {
+                left.grow_by_tri(tri);
+                left.num_tris += 1;
+            } else {
+                right.grow_by_tri(tri);
+                right.num_tris += 1;
+            }
+        }
+
+        let cost = left.num_tris as f32 * left.surface_area()
+            + right.num_tris as f32 * right.surface_area();
+
+        if cost > 0.0 {
+            return cost;
+        } else {
+            return f32::MAX;
+        }
     }
 }
 
@@ -114,5 +161,16 @@ impl Node {
                 self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position[i]);
             }
         });
+    }
+
+    fn extent(&self) -> Vec3 {
+        return Vec3::sub(self.bounds_max, self.bounds_min);
+    }
+
+    fn surface_area(&self) -> f32 {
+        let extent = self.extent();
+        return (extent.data[0] * extent.data[2])
+            + (extent.data[0] * extent.data[1])
+            + (extent.data[2] * extent.data[1]);
     }
 }

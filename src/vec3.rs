@@ -10,14 +10,6 @@ impl Vec3 {
         return Self { data: [x, y, z] };
     }
 
-    pub fn to_color(self) -> [u32; 3] {
-        return [
-            f32::floor(self.data[0] * 255.0).clamp(0.0, 255.0) as u32,
-            f32::floor(self.data[1] * 255.0).clamp(0.0, 255.0) as u32,
-            f32::floor(self.data[2] * 255.0).clamp(0.0, 255.0) as u32,
-        ];
-    }
-
     pub fn length(self) -> f32 {
         return f32::sqrt(
             (self.data[0] * self.data[0])
@@ -244,5 +236,15 @@ impl From<f32> for Vec3 {
 impl From<[f32; 3]> for Vec3 {
     fn from(value: [f32; 3]) -> Self {
         return Self { data: value };
+    }
+}
+
+impl From<Vec3> for [u8; 3] {
+    fn from(vector: Vec3) -> Self {
+        return [
+            f32::floor(vector.data[0] * 255.0).clamp(0.0, 255.0) as u8,
+            f32::floor(vector.data[1] * 255.0).clamp(0.0, 255.0) as u8,
+            f32::floor(vector.data[2] * 255.0).clamp(0.0, 255.0) as u8,
+        ];
     }
 }

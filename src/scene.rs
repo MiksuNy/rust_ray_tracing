@@ -121,9 +121,7 @@ mod obj {
 
     impl Obj {
         pub fn load(path: &str) -> Self {
-            let Ok(buffer) = std::fs::read_to_string(path) else {
-                panic!("Could not read .obj file at: '{path}'");
-            };
+            let buffer = std::fs::read_to_string(path).unwrap();
             let lines = buffer
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("#"));
@@ -221,9 +219,7 @@ mod obj {
         fn load_mtl(path: &str) -> Vec<Material> {
             let mut material_buffer: Vec<Material> = Vec::new();
 
-            let Ok(buffer) = std::fs::read_to_string(path) else {
-                panic!("Could not read .mtl file at: '{path}'");
-            };
+            let buffer = std::fs::read_to_string(path).unwrap();
             let mut lines = buffer
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("#"))

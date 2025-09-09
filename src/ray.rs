@@ -115,8 +115,13 @@ impl Ray {
         }
 
         if node.num_tris > 0 {
-            *debug_color = Vec3::add(*debug_color, Vec3::new(0.05, 0.0, 0.0));
+            if node.num_tris > 4 {
+                *debug_color = Vec3::add(*debug_color, Vec3::new(0.05, 0.0, 0.0));
+            } else {
+                *debug_color = Vec3::add(*debug_color, Vec3::new(0.0, 0.05, 0.0));
+            }
         } else {
+            *debug_color = Vec3::add(*debug_color, Vec3::new(0.0, 0.0, 0.005));
             Self::debug_bvh(ray, scene, node.children_id, debug_color);
             Self::debug_bvh(ray, scene, node.children_id + 1, debug_color);
         }
