@@ -2,7 +2,6 @@ use crate::image::{Image, PPM};
 use crate::ray::Ray;
 use crate::scene::Scene;
 use crate::vec3::Vec3;
-use std::io::Write;
 
 mod bvh;
 mod image;
@@ -10,14 +9,14 @@ mod ray;
 mod scene;
 mod vec3;
 
-const WIDTH: usize = 640;
-const HEIGHT: usize = 480;
+const WIDTH: usize = 1920;
+const HEIGHT: usize = 1080;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
 const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 3;
-const DEBUG_BVH: bool = false;
+const DEBUG_BVH: bool = true;
 const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/cornell_box.obj";
+const OBJ_PATH: &str = "../res/dragon_5k.obj";
 
 fn main() {
     // Initialize the prng to some big value
@@ -38,7 +37,7 @@ fn main() {
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3::new(0.0, 0.0, 1.8),
+                    Vec3::new(0.0, 0.2, 1.0),
                     Vec3::new(
                         screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
                         screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
