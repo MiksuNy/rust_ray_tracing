@@ -25,9 +25,21 @@ impl From<Obj> for Scene {
             let mut vertices: [Vertex; 3] = [Vertex::default(); 3];
             for i in 0..3 {
                 vertices[i] = Vertex {
-                    position: obj.vertex_buffer.positions[obj_tri.positions[i]],
-                    normal: obj.vertex_buffer.normals[obj_tri.normals[i]],
-                    tex_coord: obj.vertex_buffer.tex_coords[obj_tri.tex_coords[i]],
+                    position: *obj
+                        .vertex_buffer
+                        .positions
+                        .get(obj_tri.positions[i])
+                        .unwrap_or(&[0.0; 3]),
+                    normal: *obj
+                        .vertex_buffer
+                        .normals
+                        .get(obj_tri.normals[i])
+                        .unwrap_or(&[0.0; 3]),
+                    tex_coord: *obj
+                        .vertex_buffer
+                        .tex_coords
+                        .get(obj_tri.tex_coords[i])
+                        .unwrap_or(&[0.0; 2]),
                 };
             }
             scene
@@ -121,6 +133,8 @@ mod obj {
 
     impl Obj {
         pub fn load(path: &str) -> Self {
+            let start_time = std::time::Instant::now();
+
             let buffer = std::fs::read_to_string(path).unwrap();
             let lines = buffer
                 .lines()
@@ -203,10 +217,10 @@ mod obj {
                 }
             }
 
-            // TODO: Hack, fix this
-            if vertex_buffer.tex_coords.is_empty() {
-                vertex_buffer.tex_coords.push([0.0f32; 2]);
-            }
+            println!(
+                "Model loading took:\t{} ms",
+                start_time.elapsed().as_millis()
+            );
 
             return Obj {
                 tris,
