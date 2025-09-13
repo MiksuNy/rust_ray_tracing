@@ -1,4 +1,4 @@
 /target
 *.ppm
-res/*
-res/!.keep
+/res/*
+!/res/.keep
