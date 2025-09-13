@@ -1,2 +1,4 @@
 /target
 *.ppm
+res/*
+res/!.keep
