@@ -1,4 +1,5 @@
 /target
 *.ppm
-/res/*
+/res/*.obj
+/res/*.mtl
 !/res/.keep
