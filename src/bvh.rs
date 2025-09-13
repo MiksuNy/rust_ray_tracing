@@ -38,7 +38,7 @@ impl BVH {
         let parent_cost = node.num_tris as f32 * node.surface_area();
 
         // Surface area heuristic
-        const NUM_BINS: usize = 4;
+        const NUM_BINS: usize = 8;
         let mut best_split_axis: usize = 0;
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
