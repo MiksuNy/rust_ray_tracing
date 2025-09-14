@@ -182,8 +182,6 @@ impl Ray {
                 let sky_color = Vec3::new(1.0, 1.0, 1.0);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
-
-                curr_bounces += 1;
                 break;
             }
         }

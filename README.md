@@ -17,11 +17,8 @@ Todo:
 Todo (maybe):
 - Windowing and GUI for realtime editing of rendering parameters etc.
 
-~250K triangles, 20 spp, 5 max bounces, 1920x1080, ~114 seconds to render
-![](suzanne_250k.png)
-Same model with debug visualization of the BVH
-![](suzanne_250k_debug.png)
-![](lucy.png)
+![](dragon.png)
+![](dragon_debug.png)
 
 Resources & references:
 - [This book series](https://raytracing.github.io/) is *the* best resource for anyone looking to start their own ray tracer.
