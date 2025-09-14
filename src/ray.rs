@@ -86,7 +86,7 @@ impl Ray {
         let t_2 = Vec3::max(t_min, t_max);
         let t_near = f32::max(f32::max(t_1.data[0], t_1.data[1]), t_1.data[2]);
         let t_far = f32::min(f32::min(t_2.data[0], t_2.data[1]), t_2.data[2]);
-        return t_near < t_far;
+        return t_near < t_far && t_far > 0.0;
     }
 
     fn traverse_bvh(ray: &Self, scene: &Scene, index: usize, hit_info: &mut HitInfo) {
