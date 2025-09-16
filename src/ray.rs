@@ -143,7 +143,7 @@ impl Ray {
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
 
-        let mut curr_bounces: usize = 0;
+        let mut curr_bounces: usize = 1;
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
 
@@ -165,8 +165,39 @@ impl Ray {
                 }
 
                 // Lambertian diffuse
-                let new_dir = Vec3::add(hit_info.hit_normal, Vec3::rand_in_unit_sphere(rng_state))
+                let diffuse = Vec3::add(hit_info.hit_normal, Vec3::rand_in_unit_sphere(rng_state))
                     .normalized();
+                let specular = Vec3::add(
+                    Vec3::reflect(ray.direction, hit_info.hit_normal),
+                    Vec3::mul_by_f32(Vec3::rand_in_unit_sphere(rng_state), hit_material.roughness),
+                )
+                .normalized();
+                let refracted = Vec3::add(
+                    Vec3::refract(ray.direction, hit_info.hit_normal, ior),
+                    Vec3::mul_by_f32(Vec3::rand_in_unit_sphere(rng_state), hit_material.roughness),
+                )
+                .normalized();
+
+                let fresnel = Self::schlick_fresnel(
+                    Vec3::dot(hit_info.hit_normal, ray.direction.reversed()),
+                    ior,
+                );
+                let is_metallic = hit_material.metallic > Vec3::rand_f32(rng_state);
+                let is_refracted = hit_material.transmission.data[0] > Vec3::rand_f32(rng_state);
+
+                let new_dir: Vec3;
+                if is_metallic {
+                    new_dir = specular;
+                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
+                } else if fresnel > Vec3::rand_f32(rng_state) {
+                    new_dir = specular;
+                } else if is_refracted {
+                    new_dir = refracted;
+                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
+                } else {
+                    new_dir = diffuse;
+                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
+                }
 
                 *ray = Self::new(
                     Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.0001)),
@@ -174,12 +205,11 @@ impl Ray {
                 );
 
                 emitted_light = Vec3::add(emitted_light, hit_material.emission);
-                ray_color = Vec3::mul(ray_color, hit_material.base_color);
                 incoming_light = Vec3::add(incoming_light, Vec3::mul(emitted_light, ray_color));
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(1.0, 1.0, 1.0);
+                let sky_color = Vec3::new(0.0, 0.0, 0.0);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
                 break;
