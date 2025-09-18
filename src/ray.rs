@@ -183,7 +183,7 @@ impl Ray {
                     ior,
                 );
                 let is_metallic = hit_material.metallic > Vec3::rand_f32(rng_state);
-                let is_refracted = hit_material.transmission.data[0] > Vec3::rand_f32(rng_state);
+                let is_refracted = hit_material.transmission > Vec3::rand_f32(rng_state);
 
                 let new_dir: Vec3;
                 if is_metallic {

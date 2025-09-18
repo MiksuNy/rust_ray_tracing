@@ -99,7 +99,7 @@ pub struct Material {
     pub name: String,
     pub base_color: Vec3,
     pub emission: Vec3,
-    pub transmission: Vec3,
+    pub transmission: f32,
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
@@ -109,9 +109,9 @@ impl Default for Material {
     fn default() -> Self {
         return Self {
             name: String::from("default_material"),
-            base_color: Vec3::new(0.8, 0.8, 0.8),
+            base_color: Vec3::new(1.0, 1.0, 1.0),
             emission: Vec3::new(0.0, 0.0, 0.0),
-            transmission: Vec3::new(0.0, 0.0, 0.0),
+            transmission: 0.0,
             ior: 1.45,
             roughness: 0.8,
             metallic: 0.0,
@@ -279,10 +279,10 @@ mod obj {
                             "Pm" => {
                                 material.metallic = attribute.next().unwrap().parse().unwrap();
                             }
+                            // NOTE: Blender exports "Tf" as a 3D vector, we only care about the
+                            // first component. AFAIK the components are always the same.
                             "Tf" => {
-                                attribute.into_iter().enumerate().for_each(|(i, val)| {
-                                    material.transmission.data[i] = val.parse().unwrap();
-                                });
+                                material.transmission = attribute.next().unwrap().parse().unwrap();
                             }
                             _ => continue,
                         }
