@@ -113,7 +113,7 @@ impl Default for Material {
             emission: Vec3::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,
-            roughness: 0.8,
+            roughness: 1.0,
             metallic: 0.0,
         };
     }
