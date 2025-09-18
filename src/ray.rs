@@ -143,7 +143,7 @@ impl Ray {
         let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
 
-        let mut curr_bounces: usize = 1;
+        let mut curr_bounces: usize = 0;
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
 
@@ -209,9 +209,15 @@ impl Ray {
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(0.0, 0.0, 0.0);
+                let sky_color = Vec3::new(1.0, 1.0, 1.0);
                 ray_color = Vec3::mul(ray_color, sky_color);
                 incoming_light = Vec3::add(incoming_light, ray_color);
+
+                // If we hit the sky directly
+                if curr_bounces == 0 {
+                    return incoming_light;
+                }
+
                 break;
             }
         }
