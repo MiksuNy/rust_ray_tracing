@@ -1,4 +1,4 @@
-use crate::Vec3;
+use crate::Vec3f;
 use crate::bvh::BVH;
 use crate::scene::obj::Obj;
 
@@ -76,8 +76,8 @@ impl Triangle {
         };
     }
 
-    pub fn mid(&self) -> Vec3 {
-        return Vec3::new(
+    pub fn mid(&self) -> Vec3f {
+        return Vec3f::new(
             (self.vertices[0].position[0]
                 + self.vertices[1].position[0]
                 + self.vertices[2].position[0])
@@ -97,8 +97,8 @@ impl Triangle {
 #[derive(Clone)]
 pub struct Material {
     pub name: String,
-    pub base_color: Vec3,
-    pub emission: Vec3,
+    pub base_color: Vec3f,
+    pub emission: Vec3f,
     pub transmission: f32,
     pub ior: f32,
     pub roughness: f32,
@@ -109,8 +109,8 @@ impl Default for Material {
     fn default() -> Self {
         return Self {
             name: String::from("default_material"),
-            base_color: Vec3::new(1.0, 1.0, 1.0),
-            emission: Vec3::new(0.0, 0.0, 0.0),
+            base_color: Vec3f::new(1.0, 1.0, 1.0),
+            emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,
             roughness: 1.0,
@@ -121,7 +121,7 @@ impl Default for Material {
 
 /// Worst .obj parser ever
 mod obj {
-    use crate::{scene::Material, vec3::Vec3};
+    use crate::{Vec3f, scene::Material};
     use std::str::FromStr;
 
     #[derive(Default)]
@@ -204,12 +204,12 @@ mod obj {
             // Precalculating vertex normals
             if vertex_buffer.normals.is_empty() {
                 for (i, tri) in tris.iter_mut().enumerate() {
-                    let v_1 = Vec3::from(vertex_buffer.positions[tri.positions[0]]);
-                    let v_2 = Vec3::from(vertex_buffer.positions[tri.positions[1]]);
-                    let v_3 = Vec3::from(vertex_buffer.positions[tri.positions[2]]);
-                    let u = Vec3::sub(v_2, v_1);
-                    let v = Vec3::sub(v_3, v_1);
-                    let n = Vec3::cross(u, v).normalized();
+                    let v_1 = Vec3f::from(vertex_buffer.positions[tri.positions[0]]);
+                    let v_2 = Vec3f::from(vertex_buffer.positions[tri.positions[1]]);
+                    let v_3 = Vec3f::from(vertex_buffer.positions[tri.positions[2]]);
+                    let u = v_2 - v_1;
+                    let v = v_3 - v_1;
+                    let n = Vec3f::cross(u, v).normalized();
                     vertex_buffer.normals.push(n.data);
                     tri.normals[0] = i;
                     tri.normals[1] = i;

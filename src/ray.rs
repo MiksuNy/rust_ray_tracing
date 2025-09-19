@@ -1,17 +1,18 @@
-use crate::Vec3;
+use crate::Vec3f;
 use crate::bvh::Node;
 use crate::scene::{Scene, Triangle};
+use crate::vector::Vec3Swizzles;
 
 #[derive(Clone, Copy)]
 pub struct Ray {
-    pub origin: Vec3,
-    pub direction: Vec3,
+    pub origin: Vec3f,
+    pub direction: Vec3f,
 }
 
 struct HitInfo {
     has_hit: bool,
-    hit_point: Vec3,
-    hit_normal: Vec3,
+    hit_point: Vec3f,
+    hit_normal: Vec3f,
     hit_distance: f32,
     hit_material_id: usize,
     front_face: bool,
@@ -21,8 +22,8 @@ impl Default for HitInfo {
     fn default() -> Self {
         return Self {
             has_hit: false,
-            hit_point: Vec3::default(),
-            hit_normal: Vec3::default(),
+            hit_point: Vec3f::default(),
+            hit_normal: Vec3f::default(),
             hit_distance: f32::MAX,
             hit_material_id: 0,
             front_face: false,
@@ -31,39 +32,39 @@ impl Default for HitInfo {
 }
 
 impl Ray {
-    pub fn new(origin: Vec3, direction: Vec3) -> Self {
+    pub fn new(origin: Vec3f, direction: Vec3f) -> Self {
         return Self { origin, direction };
     }
 
     fn intersect_tri(ray: &Self, tri: &Triangle) -> HitInfo {
-        let v_1 = Vec3::from(tri.vertices[0].position);
-        let v_2 = Vec3::from(tri.vertices[1].position);
-        let v_3 = Vec3::from(tri.vertices[2].position);
+        let v_1 = Vec3f::from(tri.vertices[0].position);
+        let v_2 = Vec3f::from(tri.vertices[1].position);
+        let v_3 = Vec3f::from(tri.vertices[2].position);
 
-        let edge_1 = Vec3::sub(v_2, v_1);
-        let edge_2 = Vec3::sub(v_3, v_1);
+        let edge_1 = v_2 - v_1;
+        let edge_2 = v_3 - v_1;
 
-        let ray_cross_e2 = Vec3::cross(ray.direction, edge_2);
-        let det = Vec3::dot(edge_1, ray_cross_e2);
+        let ray_cross_e2 = Vec3f::cross(ray.direction, edge_2);
+        let det = Vec3f::dot(edge_1, ray_cross_e2);
 
         let inv_det = 1.0 / det;
-        let s = Vec3::sub(ray.origin, v_1);
-        let u = inv_det * Vec3::dot(s, ray_cross_e2);
+        let s = ray.origin - v_1;
+        let u = inv_det * Vec3f::dot(s, ray_cross_e2);
 
-        let s_cross_e1 = Vec3::cross(s, edge_1);
-        let v = inv_det * Vec3::dot(ray.direction, s_cross_e1);
+        let s_cross_e1 = Vec3f::cross(s, edge_1);
+        let v = inv_det * Vec3f::dot(ray.direction, s_cross_e1);
 
-        let t = inv_det * Vec3::dot(edge_2, s_cross_e1);
+        let t = inv_det * Vec3f::dot(edge_2, s_cross_e1);
 
         let front_face = det > 0.0;
 
-        let hit_point = Vec3::add(ray.origin, Vec3::mul_by_f32(ray.direction, t));
+        let hit_point = ray.origin + (ray.direction * t);
 
-        let normal: Vec3;
+        let normal: Vec3f;
         if front_face {
-            normal = Vec3::normalized(Vec3::cross(edge_1, edge_2));
+            normal = Vec3f::normalized(Vec3f::cross(edge_1, edge_2));
         } else {
-            normal = Vec3::normalized(Vec3::cross(edge_2, edge_1));
+            normal = Vec3f::normalized(Vec3f::cross(edge_2, edge_1));
         }
 
         return HitInfo {
@@ -80,12 +81,12 @@ impl Ray {
     }
 
     fn intersect_node(ray: &Self, node: &Node) -> bool {
-        let t_min = Vec3::div(Vec3::sub(node.bounds_min, ray.origin), ray.direction);
-        let t_max = Vec3::div(Vec3::sub(node.bounds_max, ray.origin), ray.direction);
-        let t_1 = Vec3::min(t_min, t_max);
-        let t_2 = Vec3::max(t_min, t_max);
-        let t_near = f32::max(f32::max(t_1.data[0], t_1.data[1]), t_1.data[2]);
-        let t_far = f32::min(f32::min(t_2.data[0], t_2.data[1]), t_2.data[2]);
+        let t_min = (node.bounds_min - ray.origin) / ray.direction;
+        let t_max = (node.bounds_max - ray.origin) / ray.direction;
+        let t_1 = Vec3f::min(t_min, t_max);
+        let t_2 = Vec3f::max(t_min, t_max);
+        let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
+        let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
         return t_near < t_far && t_far > 0.0;
     }
 
@@ -108,7 +109,7 @@ impl Ray {
         }
     }
 
-    fn debug_bvh(ray: &Self, scene: &Scene, index: usize, debug_color: &mut Vec3) {
+    fn debug_bvh(ray: &Self, scene: &Scene, index: usize, debug_color: &mut Vec3f) {
         let node = scene.bvh.nodes[index];
         if !Self::intersect_node(ray, &node) {
             return;
@@ -116,12 +117,12 @@ impl Ray {
 
         if node.num_tris > 0 {
             if node.num_tris > 4 {
-                *debug_color = Vec3::add(*debug_color, Vec3::new(0.05, 0.0, 0.0));
+                *debug_color += Vec3f::new(0.05, 0.0, 0.0);
             } else {
-                *debug_color = Vec3::add(*debug_color, Vec3::new(0.0, 0.05, 0.0));
+                *debug_color += Vec3f::new(0.0, 0.05, 0.0);
             }
         } else {
-            *debug_color = Vec3::add(*debug_color, Vec3::new(0.0, 0.0, 0.005));
+            *debug_color += Vec3f::new(0.0, 0.0, 0.005);
             Self::debug_bvh(ray, scene, node.children_id, debug_color);
             Self::debug_bvh(ray, scene, node.children_id + 1, debug_color);
         }
@@ -138,10 +139,10 @@ impl Ray {
         scene: &Scene,
         rng_state: &mut u32,
         debug_bvh: bool,
-    ) -> Vec3 {
-        let mut ray_color = Vec3::new(1.0, 1.0, 1.0);
-        let mut incoming_light = Vec3::new(0.0, 0.0, 0.0);
-        let mut emitted_light = Vec3::new(0.0, 0.0, 0.0);
+    ) -> Vec3f {
+        let mut ray_color = Vec3f::new(1.0, 1.0, 1.0);
+        let mut incoming_light = Vec3f::new(0.0, 0.0, 0.0);
+        let mut emitted_light = Vec3f::new(0.0, 0.0, 0.0);
 
         let mut curr_bounces: usize = 0;
         while curr_bounces < max_bounces {
@@ -165,53 +166,46 @@ impl Ray {
                 }
 
                 // Lambertian diffuse
-                let diffuse = Vec3::add(hit_info.hit_normal, Vec3::rand_in_unit_sphere(rng_state))
+                let diffuse =
+                    (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
+                let specular = (Vec3f::reflect(ray.direction, hit_info.hit_normal)
+                    + Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness)
                     .normalized();
-                let specular = Vec3::add(
-                    Vec3::reflect(ray.direction, hit_info.hit_normal),
-                    Vec3::mul_by_f32(Vec3::rand_in_unit_sphere(rng_state), hit_material.roughness),
-                )
-                .normalized();
-                let refracted = Vec3::add(
-                    Vec3::refract(ray.direction, hit_info.hit_normal, ior),
-                    Vec3::mul_by_f32(Vec3::rand_in_unit_sphere(rng_state), hit_material.roughness),
-                )
-                .normalized();
+                let refracted = (Vec3f::refract(ray.direction, hit_info.hit_normal, ior)
+                    + (Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness))
+                    .normalized();
 
                 let fresnel = Self::schlick_fresnel(
-                    Vec3::dot(hit_info.hit_normal, ray.direction.reversed()),
+                    Vec3f::dot(hit_info.hit_normal, ray.direction.reversed()),
                     ior,
                 );
-                let is_metallic = hit_material.metallic > Vec3::rand_f32(rng_state);
-                let is_refracted = hit_material.transmission > Vec3::rand_f32(rng_state);
+                let is_metallic = hit_material.metallic > Vec3f::rand_f32(rng_state);
+                let is_refracted = hit_material.transmission > Vec3f::rand_f32(rng_state);
 
-                let new_dir: Vec3;
+                let new_dir: Vec3f;
                 if is_metallic {
                     new_dir = specular;
-                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
-                } else if fresnel > Vec3::rand_f32(rng_state) {
+                    ray_color *= hit_material.base_color;
+                } else if fresnel > Vec3f::rand_f32(rng_state) {
                     new_dir = specular;
                 } else if is_refracted {
                     new_dir = refracted;
-                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
+                    ray_color *= hit_material.base_color;
                 } else {
                     new_dir = diffuse;
-                    ray_color = Vec3::mul(ray_color, hit_material.base_color);
+                    ray_color *= hit_material.base_color;
                 }
 
-                *ray = Self::new(
-                    Vec3::add(hit_info.hit_point, Vec3::mul_by_f32(new_dir, 0.0001)),
-                    new_dir,
-                );
+                *ray = Self::new(hit_info.hit_point + new_dir * 0.0001, new_dir);
 
-                emitted_light = Vec3::add(emitted_light, hit_material.emission);
-                incoming_light = Vec3::add(incoming_light, Vec3::mul(emitted_light, ray_color));
+                emitted_light += hit_material.emission;
+                incoming_light += emitted_light * ray_color;
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3::new(1.0, 1.0, 1.0);
-                ray_color = Vec3::mul(ray_color, sky_color);
-                incoming_light = Vec3::add(incoming_light, ray_color);
+                let sky_color = Vec3f::new(1.0, 1.0, 1.0);
+                ray_color *= sky_color;
+                incoming_light += ray_color;
 
                 // If we hit the sky directly
                 if curr_bounces == 0 {
@@ -222,6 +216,6 @@ impl Ray {
             }
         }
 
-        return Vec3::div(incoming_light, Vec3::from(curr_bounces as f32));
+        return incoming_light / curr_bounces as f32;
     }
 }

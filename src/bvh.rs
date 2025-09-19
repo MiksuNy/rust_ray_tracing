@@ -1,6 +1,6 @@
 use crate::{
     scene::{Scene, Triangle},
-    vec3::Vec3,
+    vector::{Vec3Swizzles, Vec3f},
 };
 
 #[derive(Clone, Default)]
@@ -130,8 +130,8 @@ impl BVH {
 
 #[derive(Clone, Copy)]
 pub struct Node {
-    pub bounds_min: Vec3,
-    pub bounds_max: Vec3,
+    pub bounds_min: Vec3f,
+    pub bounds_max: Vec3f,
     pub children_id: usize,
     pub first_tri_id: usize,
     pub num_tris: usize,
@@ -140,8 +140,8 @@ pub struct Node {
 impl Default for Node {
     fn default() -> Self {
         return Self {
-            bounds_min: Vec3::from(f32::MAX),
-            bounds_max: Vec3::from(-f32::MAX),
+            bounds_min: Vec3f::from(f32::MAX),
+            bounds_max: Vec3f::from(-f32::MAX),
             children_id: 0,
             first_tri_id: 0,
             num_tris: 0,
@@ -159,14 +159,12 @@ impl Node {
         });
     }
 
-    fn extent(&self) -> Vec3 {
-        return Vec3::sub(self.bounds_max, self.bounds_min);
+    fn extent(&self) -> Vec3f {
+        return self.bounds_max - self.bounds_min;
     }
 
     fn surface_area(&self) -> f32 {
         let extent = self.extent();
-        return (extent.data[0] * extent.data[2])
-            + (extent.data[0] * extent.data[1])
-            + (extent.data[2] * extent.data[1]);
+        return (extent.x() * extent.z()) + (extent.x() * extent.y()) + (extent.z() * extent.y());
     }
 }
