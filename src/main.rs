@@ -12,11 +12,11 @@ mod vec3;
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 3;
-const DEBUG_BVH: bool = true;
+const SAMPLE_COUNT: usize = 10;
+const MAX_BOUNCES: usize = 8;
+const DEBUG_BVH: bool = false;
 const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/sponza.obj";
+const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 
 fn main() {
     // Initialize the prng to some big value
@@ -37,10 +37,10 @@ fn main() {
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3::new(0.0, 2.0, 15.0),
+                    Vec3::new(0.0, 0.0, 4.5),
                     Vec3::new(
-                        screen_x + Vec3::rand_f32(&mut rng_state) * 0.0005,
-                        screen_y + Vec3::rand_f32(&mut rng_state) * 0.0005,
+                        screen_x + (Vec3::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
+                        screen_y + (Vec3::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
                         -1.0,
                     )
                     .normalized(),
