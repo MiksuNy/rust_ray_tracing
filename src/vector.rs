@@ -286,6 +286,7 @@ impl DivAssign<f32> for Vec3f {
     }
 }
 
+#[allow(dead_code)]
 pub trait Vec3Swizzles<T> {
     fn x(&self) -> T;
     fn y(&self) -> T;
