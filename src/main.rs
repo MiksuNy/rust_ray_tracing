@@ -13,7 +13,7 @@ const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
 const SAMPLE_COUNT: usize = 10;
-const MAX_BOUNCES: usize = 8;
+const MAX_BOUNCES: usize = 12;
 const DEBUG_BVH: bool = false;
 const IMAGE_PATH: &str = "output.ppm";
 const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
@@ -62,10 +62,27 @@ fn main() {
             image.pixel_data.push(final_color.into());
         }
 
-        println!("Lines remaining: {}", y);
+        utility::progress_bar("Rendering", (HEIGHT - y) as f32 / HEIGHT as f32, 30);
     }
 
-    println!("Rendering took {} ms", start_time.elapsed().as_millis());
+    eprintln!("\nRendering took\t{} ms", start_time.elapsed().as_millis());
 
     image.write_to_path(IMAGE_PATH);
+}
+
+mod utility {
+    pub fn progress_bar(name: &str, fill_amount: f32, bar_size: usize) {
+        let symbol_count: usize = (bar_size as f32 * fill_amount).floor() as usize;
+        let percentage: usize = (100.0 * fill_amount).floor() as usize;
+
+        eprint!("\x1B[2K{}: {}% [", name, percentage);
+        for i in 0..bar_size {
+            if i < symbol_count {
+                eprint!("#");
+            } else {
+                eprint!(" ");
+            }
+        }
+        eprint!("]\r");
+    }
 }

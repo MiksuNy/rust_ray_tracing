@@ -22,8 +22,8 @@ impl BVH {
 
         Self::split_node(0, &mut bvh, scene);
 
-        println!("BVH length:\t{}", bvh.nodes.len());
-        println!(
+        eprintln!("BVH length:\t{}", bvh.nodes.len());
+        eprintln!(
             "BVH took:\t{} ms to build",
             start_time.elapsed().as_millis()
         );

@@ -217,8 +217,9 @@ mod obj {
                 }
             }
 
-            println!(
-                "Model loading took:\t{} ms",
+            eprintln!(
+                "'{}' took:\t{} ms to load",
+                path,
                 start_time.elapsed().as_millis()
             );
 
