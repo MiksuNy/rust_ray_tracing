@@ -60,11 +60,13 @@ impl Ray {
 
         let hit_point = ray.origin + (ray.direction * t);
 
-        let normal: Vec3f;
-        if front_face {
-            normal = Vec3f::normalized(Vec3f::cross(edge_1, edge_2));
-        } else {
-            normal = Vec3f::normalized(Vec3f::cross(edge_2, edge_1));
+        // Smooth shading
+        let n_0: Vec3f = tri.vertices[0].normal.into();
+        let n_1: Vec3f = tri.vertices[1].normal.into();
+        let n_2: Vec3f = tri.vertices[2].normal.into();
+        let mut normal: Vec3f = n_0 * (1.0 - u - v) + (n_1 * u) + (n_2 * v);
+        if !front_face {
+            normal = normal.reversed();
         }
 
         return HitInfo {
