@@ -71,7 +71,7 @@ impl Ray {
 
         return HitInfo {
             has_hit: t > 0.0001
-                && !(det < 0.0)
+                && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
             hit_point: hit_point,
