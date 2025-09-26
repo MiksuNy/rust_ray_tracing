@@ -2,20 +2,30 @@
 
 Features:
 - Partial support for .obj models (only triangulated models)
+- Smooth shading (vertex normals)
 - Limited support for .mtl files with PBR
-- Export to .ppm format
 - Simple BVH
+- Supported formats for rendering
+    - .ppm
 
 Todo:
 - Support for other image formats (at least .bmp, maybe .png)
-- 3D models
-    - Better support for .obj files (textures, normals) OR
-    - Just use glTF format for camera support, better PBR materials etc.
+- Scenes and models
+    - Texture support for .obj files
+    - Support for .gltf format for camera support, better PBR materials etc.
+    - Simple scene file format
 - Better BVH
 - Multithreaded rendering
 
+Todo (later):
+- Option to use the GPU for rendering (probably compute shaders first, then hardware accelerated ray tracing)
+
 Todo (maybe):
 - Windowing and GUI for realtime editing of rendering parameters etc.
+
+Known issues:
+- Some .obj exporters don't work with this. The best way to get around this is to bring the model into Blender and export again.
+- The BVH ignores some triangles, creating visual holes in a model. It seems like this only happens when triangles are exactly parallel to an axis.
 
 ![](dragon.png)
 ![](dragon_debug.png)
