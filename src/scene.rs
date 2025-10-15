@@ -109,7 +109,7 @@ impl Default for Material {
     fn default() -> Self {
         return Self {
             name: String::from("default_material"),
-            base_color: Vec3f::new(1.0, 1.0, 1.0),
+            base_color: Vec3f::new(0.6, 0.6, 0.6),
             emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,
