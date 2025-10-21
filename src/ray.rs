@@ -170,54 +170,32 @@ impl Ray {
                 // Lambertian diffuse
                 let diffuse =
                     (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
-                let specular = (Vec3f::reflect(ray.direction, hit_info.hit_normal)
-                    + Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness)
-                    .normalized();
-                let refracted = (Vec3f::refract(ray.direction, hit_info.hit_normal, ior)
-                    + (Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness))
-                    .normalized();
-
-                let fresnel = Self::schlick_fresnel(
-                    Vec3f::dot(hit_info.hit_normal, ray.direction.reversed()),
-                    ior,
-                );
-                let is_metallic = hit_material.metallic > Vec3f::rand_f32(rng_state);
-                let is_refracted = hit_material.transmission > Vec3f::rand_f32(rng_state);
-
-                let new_dir: Vec3f;
-                if is_metallic {
-                    new_dir = specular;
-                    ray_color *= hit_material.base_color;
-                } else if fresnel > Vec3f::rand_f32(rng_state) {
-                    new_dir = specular;
-                } else if is_refracted {
-                    new_dir = refracted;
-                    ray_color *= hit_material.base_color;
-                } else {
-                    new_dir = diffuse;
-                    ray_color *= hit_material.base_color;
-                }
+                let new_dir = diffuse;
 
                 *ray = Self::new(hit_info.hit_point + new_dir * 0.0001, new_dir);
 
+                ray_color *= hit_material.base_color;
                 emitted_light += hit_material.emission;
                 incoming_light += emitted_light * ray_color;
 
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                ray_color *= sky_color;
-                incoming_light += ray_color;
+                let sky_strength = Vec3f::from(1.0);
 
-                // If we hit the sky directly
-                if curr_bounces == 0 {
-                    return incoming_light;
-                }
+                ray_color *= sky_color;
+                emitted_light += sky_strength;
+                incoming_light += emitted_light * ray_color;
 
                 break;
             }
         }
 
-        return incoming_light / curr_bounces as f32;
+        // If we hit the sky directly
+        if curr_bounces == 0 {
+            return incoming_light;
+        } else {
+            return incoming_light / curr_bounces as f32;
+        }
     }
 }
