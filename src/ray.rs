@@ -63,8 +63,8 @@ impl Ray {
     fn intersect_node(ray: &Self, node: &Node) -> bool {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
-        let t_1 = Vec3f::min(t_min, t_max);
-        let t_2 = Vec3f::max(t_min, t_max);
+        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(0.0001);
+        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(0.0001);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
         return t_near < t_far && t_far > 0.0;
