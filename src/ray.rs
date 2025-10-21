@@ -9,28 +9,6 @@ pub struct Ray {
     pub direction: Vec3f,
 }
 
-struct HitInfo {
-    has_hit: bool,
-    hit_point: Vec3f,
-    hit_normal: Vec3f,
-    hit_distance: f32,
-    hit_material_id: usize,
-    front_face: bool,
-}
-
-impl Default for HitInfo {
-    fn default() -> Self {
-        return Self {
-            has_hit: false,
-            hit_point: Vec3f::default(),
-            hit_normal: Vec3f::default(),
-            hit_distance: f32::MAX,
-            hit_material_id: 0,
-            front_face: false,
-        };
-    }
-}
-
 impl Ray {
     pub fn new(origin: Vec3f, direction: Vec3f) -> Self {
         return Self { origin, direction };
@@ -197,5 +175,27 @@ impl Ray {
         } else {
             return incoming_light / curr_bounces as f32;
         }
+    }
+}
+
+struct HitInfo {
+    has_hit: bool,
+    hit_point: Vec3f,
+    hit_normal: Vec3f,
+    hit_distance: f32,
+    hit_material_id: usize,
+    front_face: bool,
+}
+
+impl Default for HitInfo {
+    fn default() -> Self {
+        return Self {
+            has_hit: false,
+            hit_point: Vec3f::default(),
+            hit_normal: Vec3f::default(),
+            hit_distance: f32::MAX,
+            hit_material_id: 0,
+            front_face: false,
+        };
     }
 }

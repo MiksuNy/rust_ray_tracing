@@ -287,204 +287,208 @@ impl DivAssign<f32> for Vec3f {
 }
 
 #[allow(dead_code)]
-pub trait Vec3Swizzles<T> {
-    fn x(&self) -> T;
-    fn y(&self) -> T;
-    fn z(&self) -> T;
+pub trait Vec3Swizzles {
+    type T;
 
-    fn xx(&self) -> [T; 2];
-    fn xy(&self) -> [T; 2];
-    fn xz(&self) -> [T; 2];
-    fn yx(&self) -> [T; 2];
-    fn yy(&self) -> [T; 2];
-    fn yz(&self) -> [T; 2];
-    fn zx(&self) -> [T; 2];
-    fn zy(&self) -> [T; 2];
-    fn zz(&self) -> [T; 2];
+    fn x(&self) -> Self::T;
+    fn y(&self) -> Self::T;
+    fn z(&self) -> Self::T;
 
-    fn xxx(&self) -> [T; 3];
-    fn xxy(&self) -> [T; 3];
-    fn xxz(&self) -> [T; 3];
-    fn yxx(&self) -> [T; 3];
-    fn yxy(&self) -> [T; 3];
-    fn yxz(&self) -> [T; 3];
-    fn zxx(&self) -> [T; 3];
-    fn zxy(&self) -> [T; 3];
-    fn zxz(&self) -> [T; 3];
-    fn xyx(&self) -> [T; 3];
-    fn xyy(&self) -> [T; 3];
-    fn xyz(&self) -> [T; 3];
-    fn yyx(&self) -> [T; 3];
-    fn yyy(&self) -> [T; 3];
-    fn yyz(&self) -> [T; 3];
-    fn zyx(&self) -> [T; 3];
-    fn zyy(&self) -> [T; 3];
-    fn zyz(&self) -> [T; 3];
-    fn xzx(&self) -> [T; 3];
-    fn xzy(&self) -> [T; 3];
-    fn xzz(&self) -> [T; 3];
-    fn yzx(&self) -> [T; 3];
-    fn yzy(&self) -> [T; 3];
-    fn yzz(&self) -> [T; 3];
-    fn zzx(&self) -> [T; 3];
-    fn zzy(&self) -> [T; 3];
-    fn zzz(&self) -> [T; 3];
+    fn xx(&self) -> [Self::T; 2];
+    fn xy(&self) -> [Self::T; 2];
+    fn xz(&self) -> [Self::T; 2];
+    fn yx(&self) -> [Self::T; 2];
+    fn yy(&self) -> [Self::T; 2];
+    fn yz(&self) -> [Self::T; 2];
+    fn zx(&self) -> [Self::T; 2];
+    fn zy(&self) -> [Self::T; 2];
+    fn zz(&self) -> [Self::T; 2];
+
+    fn xxx(&self) -> [Self::T; 3];
+    fn xxy(&self) -> [Self::T; 3];
+    fn xxz(&self) -> [Self::T; 3];
+    fn yxx(&self) -> [Self::T; 3];
+    fn yxy(&self) -> [Self::T; 3];
+    fn yxz(&self) -> [Self::T; 3];
+    fn zxx(&self) -> [Self::T; 3];
+    fn zxy(&self) -> [Self::T; 3];
+    fn zxz(&self) -> [Self::T; 3];
+    fn xyx(&self) -> [Self::T; 3];
+    fn xyy(&self) -> [Self::T; 3];
+    fn xyz(&self) -> [Self::T; 3];
+    fn yyx(&self) -> [Self::T; 3];
+    fn yyy(&self) -> [Self::T; 3];
+    fn yyz(&self) -> [Self::T; 3];
+    fn zyx(&self) -> [Self::T; 3];
+    fn zyy(&self) -> [Self::T; 3];
+    fn zyz(&self) -> [Self::T; 3];
+    fn xzx(&self) -> [Self::T; 3];
+    fn xzy(&self) -> [Self::T; 3];
+    fn xzz(&self) -> [Self::T; 3];
+    fn yzx(&self) -> [Self::T; 3];
+    fn yzy(&self) -> [Self::T; 3];
+    fn yzz(&self) -> [Self::T; 3];
+    fn zzx(&self) -> [Self::T; 3];
+    fn zzy(&self) -> [Self::T; 3];
+    fn zzz(&self) -> [Self::T; 3];
 }
 
-impl Vec3Swizzles<f32> for Vec3f {
-    fn x(&self) -> f32 {
+impl Vec3Swizzles for Vec3f {
+    type T = f32;
+
+    fn x(&self) -> Self::T {
         return self.data[0];
     }
 
-    fn y(&self) -> f32 {
+    fn y(&self) -> Self::T {
         return self.data[1];
     }
 
-    fn z(&self) -> f32 {
+    fn z(&self) -> Self::T {
         return self.data[2];
     }
 
-    fn xx(&self) -> [f32; 2] {
+    fn xx(&self) -> [Self::T; 2] {
         return [self.data[0], self.data[0]];
     }
 
-    fn xy(&self) -> [f32; 2] {
+    fn xy(&self) -> [Self::T; 2] {
         return [self.data[0], self.data[1]];
     }
 
-    fn xz(&self) -> [f32; 2] {
+    fn xz(&self) -> [Self::T; 2] {
         return [self.data[0], self.data[2]];
     }
 
-    fn yx(&self) -> [f32; 2] {
+    fn yx(&self) -> [Self::T; 2] {
         return [self.data[1], self.data[0]];
     }
 
-    fn yy(&self) -> [f32; 2] {
+    fn yy(&self) -> [Self::T; 2] {
         return [self.data[1], self.data[1]];
     }
 
-    fn yz(&self) -> [f32; 2] {
+    fn yz(&self) -> [Self::T; 2] {
         return [self.data[1], self.data[2]];
     }
 
-    fn zx(&self) -> [f32; 2] {
+    fn zx(&self) -> [Self::T; 2] {
         return [self.data[2], self.data[0]];
     }
 
-    fn zy(&self) -> [f32; 2] {
+    fn zy(&self) -> [Self::T; 2] {
         return [self.data[2], self.data[1]];
     }
 
-    fn zz(&self) -> [f32; 2] {
+    fn zz(&self) -> [Self::T; 2] {
         return [self.data[2], self.data[2]];
     }
 
-    fn xxx(&self) -> [f32; 3] {
+    fn xxx(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[0], self.data[0]];
     }
 
-    fn xxy(&self) -> [f32; 3] {
+    fn xxy(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[0], self.data[1]];
     }
 
-    fn xxz(&self) -> [f32; 3] {
+    fn xxz(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[0], self.data[2]];
     }
 
-    fn yxx(&self) -> [f32; 3] {
+    fn yxx(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[0], self.data[0]];
     }
 
-    fn yxy(&self) -> [f32; 3] {
+    fn yxy(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[0], self.data[1]];
     }
 
-    fn yxz(&self) -> [f32; 3] {
+    fn yxz(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[0], self.data[2]];
     }
 
-    fn zxx(&self) -> [f32; 3] {
+    fn zxx(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[0], self.data[0]];
     }
 
-    fn zxy(&self) -> [f32; 3] {
+    fn zxy(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[0], self.data[1]];
     }
 
-    fn zxz(&self) -> [f32; 3] {
+    fn zxz(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[0], self.data[2]];
     }
 
-    fn xyx(&self) -> [f32; 3] {
+    fn xyx(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[1], self.data[0]];
     }
 
-    fn xyy(&self) -> [f32; 3] {
+    fn xyy(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[1], self.data[1]];
     }
 
-    fn xyz(&self) -> [f32; 3] {
+    fn xyz(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[1], self.data[2]];
     }
 
-    fn yyx(&self) -> [f32; 3] {
+    fn yyx(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[1], self.data[0]];
     }
 
-    fn yyy(&self) -> [f32; 3] {
+    fn yyy(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[1], self.data[1]];
     }
 
-    fn yyz(&self) -> [f32; 3] {
+    fn yyz(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[1], self.data[2]];
     }
 
-    fn zyx(&self) -> [f32; 3] {
+    fn zyx(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[1], self.data[0]];
     }
 
-    fn zyy(&self) -> [f32; 3] {
+    fn zyy(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[1], self.data[1]];
     }
 
-    fn zyz(&self) -> [f32; 3] {
+    fn zyz(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[1], self.data[2]];
     }
 
-    fn xzx(&self) -> [f32; 3] {
+    fn xzx(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[2], self.data[0]];
     }
 
-    fn xzy(&self) -> [f32; 3] {
+    fn xzy(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[2], self.data[1]];
     }
 
-    fn xzz(&self) -> [f32; 3] {
+    fn xzz(&self) -> [Self::T; 3] {
         return [self.data[0], self.data[2], self.data[2]];
     }
 
-    fn yzx(&self) -> [f32; 3] {
+    fn yzx(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[2], self.data[0]];
     }
 
-    fn yzy(&self) -> [f32; 3] {
+    fn yzy(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[2], self.data[1]];
     }
 
-    fn yzz(&self) -> [f32; 3] {
+    fn yzz(&self) -> [Self::T; 3] {
         return [self.data[1], self.data[2], self.data[2]];
     }
 
-    fn zzx(&self) -> [f32; 3] {
+    fn zzx(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[2], self.data[0]];
     }
 
-    fn zzy(&self) -> [f32; 3] {
+    fn zzy(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[2], self.data[1]];
     }
 
-    fn zzz(&self) -> [f32; 3] {
+    fn zzz(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[2], self.data[2]];
     }
 }
