@@ -5,6 +5,7 @@ use crate::vector::Vec3f;
 
 mod bvh;
 mod image;
+mod loader;
 mod ray;
 mod scene;
 mod vector;
