@@ -1,9 +1,9 @@
 # A CPU ray tracer written in Rust.
 
 Features:
-- Partial support for .obj models (only triangulated models)
+- Supports .obj models (only triangulated models)
+- Supports .mtl files with PBR
 - Smooth shading (vertex normals)
-- Limited support for .mtl files with PBR
 - Simple BVH
 - Supported formats for rendering
     - .ppm
@@ -11,9 +11,8 @@ Features:
 Todo:
 - Support for other image formats (at least .bmp, maybe .png)
 - Scenes and models
-    - Texture support for .obj files
-    - Support for .gltf format for camera support, better PBR materials etc.
-    - Simple scene file format
+    - Textures
+    - Support for .gltf format
 - Better BVH
 - Multithreaded rendering
 
@@ -25,8 +24,9 @@ Todo (maybe):
 
 Known issues:
 - Some .obj exporters don't work with this. The best way to get around this is to bring the model into Blender and export again.
-- The BVH ignores some triangles, creating visual holes in a model. It seems like this only happens when triangles are exactly parallel to an axis.
 
+![](cornell_box.png)
+Dragon model is from https://benedikt-bitterli.me/resources/
 ![](dragon.png)
 ![](dragon_debug.png)
 
