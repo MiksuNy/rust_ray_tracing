@@ -12,8 +12,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn load_from_obj(path: &str) -> Self {
-        let obj = OBJ::load(path);
-        return Scene::from(obj);
+        return OBJ::load(path).into();
     }
 }
 

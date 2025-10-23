@@ -8,7 +8,7 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn load_bmp(path: &str) -> Self {
+    pub fn load_from_bmp(path: &str) -> Self {
         return BMP::load(path).into();
     }
 
