@@ -2,13 +2,13 @@ use crate::{Vec3f, scene::Material};
 use std::str::FromStr;
 
 #[derive(Default)]
-pub struct Obj {
+pub struct OBJ {
     pub tris: Vec<Triangle>,
     pub vertex_buffer: VertexBuffer,
     pub materials: Vec<Material>,
 }
 
-impl Obj {
+impl OBJ {
     pub fn load(path: &str) -> Self {
         let start_time = std::time::Instant::now();
 
@@ -100,7 +100,7 @@ impl Obj {
             start_time.elapsed().as_millis()
         );
 
-        return Obj {
+        return OBJ {
             tris,
             vertex_buffer,
             materials,

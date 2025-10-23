@@ -1,6 +1,6 @@
 use crate::Vec3f;
 use crate::bvh::BVH;
-use crate::loader::obj::Obj;
+use crate::loader::obj::OBJ;
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -12,13 +12,13 @@ pub struct Scene {
 
 impl Scene {
     pub fn load_from_obj(path: &str) -> Self {
-        let obj = Obj::load(path);
+        let obj = OBJ::load(path);
         return Scene::from(obj);
     }
 }
 
-impl From<Obj> for Scene {
-    fn from(obj: Obj) -> Self {
+impl From<OBJ> for Scene {
+    fn from(obj: OBJ) -> Self {
         let mut scene = Scene::default();
 
         for obj_tri in obj.tris {

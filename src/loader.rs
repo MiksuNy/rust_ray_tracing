@@ -1,2 +1,2 @@
+pub mod bmp;
 pub mod obj;
-pub mod texture;

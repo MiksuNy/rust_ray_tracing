@@ -52,18 +52,15 @@ impl BMP {
         file.read_exact(pixel_byte_buffer.as_mut_slice()).unwrap();
 
         let mut color_buffer: Vec<[u8; 3]> = Vec::new();
-        pixel_byte_buffer
-            .iter()
-            .step_by(3)
-            .enumerate()
-            .for_each(|val| {
-                let color: [u8; 3] = [
-                    pixel_byte_buffer[(val.0 * 3) + 2],
-                    pixel_byte_buffer[(val.0 * 3) + 1],
-                    pixel_byte_buffer[(val.0 * 3) + 0],
-                ];
-                color_buffer.push(color);
-            });
+        color_buffer.reserve_exact(pixel_byte_buffer.len() / 3);
+        for i in (0..pixel_byte_buffer.len()).step_by(3).rev() {
+            let color: [u8; 3] = [
+                pixel_byte_buffer[i + 2],
+                pixel_byte_buffer[i + 1],
+                pixel_byte_buffer[i + 0],
+            ];
+            color_buffer.push(color);
+        }
 
         return BMP {
             width,
