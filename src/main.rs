@@ -5,18 +5,20 @@ use crate::vector::Vec3f;
 
 mod bvh;
 mod image;
+mod loader;
 mod ray;
 mod scene;
+mod texture;
 mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 10;
-const MAX_BOUNCES: usize = 12;
+const SAMPLE_COUNT: usize = 1;
+const MAX_BOUNCES: usize = 6;
 const DEBUG_BVH: bool = false;
 const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
+const OBJ_PATH: &str = "../res/cornell_box.obj";
 
 fn main() {
     // Initialize the prng to some big value
@@ -37,7 +39,7 @@ fn main() {
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3f::new(0.0, 0.0, 8.0),
+                    Vec3f::new(0.0, 0.0, 3.0),
                     Vec3f::new(
                         screen_x + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
                         screen_y + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,

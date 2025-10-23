@@ -1,22 +1,32 @@
 # A CPU ray tracer written in Rust.
 
 Features:
-- Partial support for .obj models (only triangulated models)
-- Limited support for .mtl files with PBR
-- Export to .ppm format
+- Supports .obj models (only triangulated models)
+- Supports .mtl files with PBR
+- Smooth shading (vertex normals)
 - Simple BVH
+- Supported formats for rendering
+    - .ppm
 
 Todo:
 - Support for other image formats (at least .bmp, maybe .png)
-- 3D models
-    - Better support for .obj files (textures, normals) OR
-    - Just use glTF format for camera support, better PBR materials etc.
+- Scenes and models
+    - Textures
+    - Support for .gltf format
 - Better BVH
 - Multithreaded rendering
+
+Todo (later):
+- Option to use the GPU for rendering (probably compute shaders first, then hardware accelerated ray tracing)
 
 Todo (maybe):
 - Windowing and GUI for realtime editing of rendering parameters etc.
 
+Known issues:
+- Some .obj exporters don't work with this. The best way to get around this is to bring the model into Blender and export again.
+
+![](cornell_box.png)
+Dragon model is from https://benedikt-bitterli.me/resources/
 ![](dragon.png)
 ![](dragon_debug.png)
 

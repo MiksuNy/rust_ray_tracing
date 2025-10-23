@@ -9,28 +9,6 @@ pub struct Ray {
     pub direction: Vec3f,
 }
 
-struct HitInfo {
-    has_hit: bool,
-    hit_point: Vec3f,
-    hit_normal: Vec3f,
-    hit_distance: f32,
-    hit_material_id: usize,
-    front_face: bool,
-}
-
-impl Default for HitInfo {
-    fn default() -> Self {
-        return Self {
-            has_hit: false,
-            hit_point: Vec3f::default(),
-            hit_normal: Vec3f::default(),
-            hit_distance: f32::MAX,
-            hit_material_id: 0,
-            front_face: false,
-        };
-    }
-}
-
 impl Ray {
     pub fn new(origin: Vec3f, direction: Vec3f) -> Self {
         return Self { origin, direction };
@@ -71,7 +49,7 @@ impl Ray {
 
         return HitInfo {
             has_hit: t > 0.0001
-                && !(det < 0.0)
+                && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
             hit_point: hit_point,
@@ -85,8 +63,8 @@ impl Ray {
     fn intersect_node(ray: &Self, node: &Node) -> bool {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
-        let t_1 = Vec3f::min(t_min, t_max);
-        let t_2 = Vec3f::max(t_min, t_max);
+        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(0.0001);
+        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(0.0001);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
         return t_near < t_far && t_far > 0.0;
@@ -170,54 +148,54 @@ impl Ray {
                 // Lambertian diffuse
                 let diffuse =
                     (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
-                let specular = (Vec3f::reflect(ray.direction, hit_info.hit_normal)
-                    + Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness)
-                    .normalized();
-                let refracted = (Vec3f::refract(ray.direction, hit_info.hit_normal, ior)
-                    + (Vec3f::rand_in_unit_sphere(rng_state) * hit_material.roughness))
-                    .normalized();
-
-                let fresnel = Self::schlick_fresnel(
-                    Vec3f::dot(hit_info.hit_normal, ray.direction.reversed()),
-                    ior,
-                );
-                let is_metallic = hit_material.metallic > Vec3f::rand_f32(rng_state);
-                let is_refracted = hit_material.transmission > Vec3f::rand_f32(rng_state);
-
-                let new_dir: Vec3f;
-                if is_metallic {
-                    new_dir = specular;
-                    ray_color *= hit_material.base_color;
-                } else if fresnel > Vec3f::rand_f32(rng_state) {
-                    new_dir = specular;
-                } else if is_refracted {
-                    new_dir = refracted;
-                    ray_color *= hit_material.base_color;
-                } else {
-                    new_dir = diffuse;
-                    ray_color *= hit_material.base_color;
-                }
+                let new_dir = diffuse;
 
                 *ray = Self::new(hit_info.hit_point + new_dir * 0.0001, new_dir);
 
+                ray_color *= hit_material.base_color;
                 emitted_light += hit_material.emission;
                 incoming_light += emitted_light * ray_color;
 
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                ray_color *= sky_color;
-                incoming_light += ray_color;
+                let sky_strength = Vec3f::from(1.0);
 
-                // If we hit the sky directly
-                if curr_bounces == 0 {
-                    return incoming_light;
-                }
+                ray_color *= sky_color;
+                emitted_light += sky_strength;
+                incoming_light += emitted_light * ray_color;
 
                 break;
             }
         }
 
-        return incoming_light / curr_bounces as f32;
+        // If we hit the sky directly
+        if curr_bounces == 0 {
+            return incoming_light;
+        } else {
+            return incoming_light / curr_bounces as f32;
+        }
+    }
+}
+
+struct HitInfo {
+    has_hit: bool,
+    hit_point: Vec3f,
+    hit_normal: Vec3f,
+    hit_distance: f32,
+    hit_material_id: usize,
+    front_face: bool,
+}
+
+impl Default for HitInfo {
+    fn default() -> Self {
+        return Self {
+            has_hit: false,
+            hit_point: Vec3f::default(),
+            hit_normal: Vec3f::default(),
+            hit_distance: f32::MAX,
+            hit_material_id: 0,
+            front_face: false,
+        };
     }
 }
