@@ -3,6 +3,10 @@ use crate::bvh::Node;
 use crate::scene::{Scene, Triangle};
 use crate::vector::Vec3Swizzles;
 
+// NOTE: This is used when moving the ray towards a new direction on bounce AND for increasing node
+// bounds by a tiny amount when checking intersections with rays to prevent visual holes in models
+const RAY_HIT_OFFSET: f32 = 0.0001;
+
 #[derive(Clone, Copy)]
 pub struct Ray {
     pub origin: Vec3f,
@@ -63,8 +67,9 @@ impl Ray {
     fn intersect_node(ray: &Self, node: &Node) -> bool {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
-        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(0.0001);
-        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(0.0001);
+        // NOTE: Adding and subtracting tiny amounts from t_1 and t_2 feels very hacky and not good
+        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(RAY_HIT_OFFSET);
+        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(RAY_HIT_OFFSET);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
         return t_near < t_far && t_far > 0.0;
@@ -150,7 +155,7 @@ impl Ray {
                     (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
                 let new_dir = diffuse;
 
-                *ray = Self::new(hit_info.hit_point + new_dir * 0.0001, new_dir);
+                *ray = Self::new(hit_info.hit_point + new_dir * RAY_HIT_OFFSET, new_dir);
 
                 ray_color *= hit_material.base_color;
                 emitted_light += hit_material.emission;
