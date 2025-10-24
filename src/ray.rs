@@ -56,10 +56,10 @@ impl Ray {
                 && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
-            hit_point: hit_point,
-            hit_normal: normal,
-            hit_distance: t,
-            hit_material_id: tri.material_id,
+            point: hit_point,
+            normal: normal,
+            distance: t,
+            material_id: tri.material_id,
             front_face: front_face,
         };
     }
@@ -84,7 +84,7 @@ impl Ray {
         if node.num_tris > 0 {
             for i in 0..node.num_tris {
                 let temp_hit_info = Self::intersect_tri(ray, &scene.tris[node.first_tri_id + i]);
-                if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
+                if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
                     *hit_info = temp_hit_info;
                 }
             }
@@ -142,7 +142,7 @@ impl Ray {
             }
 
             if hit_info.has_hit {
-                let hit_material = &scene.materials[hit_info.hit_material_id];
+                let hit_material = &scene.materials[hit_info.material_id];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
@@ -152,10 +152,10 @@ impl Ray {
 
                 // Lambertian diffuse
                 let diffuse =
-                    (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
+                    (hit_info.normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
                 let new_dir = diffuse;
 
-                *ray = Self::new(hit_info.hit_point + new_dir * RAY_HIT_OFFSET, new_dir);
+                *ray = Self::new(hit_info.point + new_dir * RAY_HIT_OFFSET, new_dir);
 
                 ray_color *= hit_material.base_color;
                 emitted_light += hit_material.emission;
@@ -185,10 +185,10 @@ impl Ray {
 
 struct HitInfo {
     has_hit: bool,
-    hit_point: Vec3f,
-    hit_normal: Vec3f,
-    hit_distance: f32,
-    hit_material_id: usize,
+    point: Vec3f,
+    normal: Vec3f,
+    distance: f32,
+    material_id: usize,
     front_face: bool,
 }
 
@@ -196,10 +196,10 @@ impl Default for HitInfo {
     fn default() -> Self {
         return Self {
             has_hit: false,
-            hit_point: Vec3f::default(),
-            hit_normal: Vec3f::default(),
-            hit_distance: f32::MAX,
-            hit_material_id: 0,
+            point: Vec3f::default(),
+            normal: Vec3f::default(),
+            distance: f32::MAX,
+            material_id: 0,
             front_face: false,
         };
     }
