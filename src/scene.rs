@@ -97,6 +97,7 @@ impl Triangle {
 pub struct Material {
     pub name: String,
     pub base_color: Vec3f,
+    pub specular_tint: Vec3f,
     pub emission: Vec3f,
     pub transmission: f32,
     pub ior: f32,
@@ -109,6 +110,7 @@ impl Default for Material {
         return Self {
             name: String::from("default_material"),
             base_color: Vec3f::new(1.0, 1.0, 1.0),
+            specular_tint: Vec3f::new(1.0, 1.0, 1.0),
             emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,

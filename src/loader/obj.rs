@@ -143,6 +143,11 @@ impl OBJ {
                                 material.base_color.data[i] = val.parse().unwrap();
                             });
                         }
+                        "Ks" => {
+                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                                material.specular_tint.data[i] = val.parse().unwrap();
+                            });
+                        }
                         "Ke" => {
                             attribute.into_iter().enumerate().for_each(|(i, val)| {
                                 material.emission.data[i] = val.parse().unwrap();
