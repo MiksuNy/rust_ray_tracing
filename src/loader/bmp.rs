@@ -13,7 +13,7 @@ impl BMP {
         let identifier_buf: &mut [u8; 2] = &mut [0; 2];
         file.read_exact(identifier_buf).unwrap();
         if identifier_buf != b"BM" {
-            panic!("File identifier is incorrect!");
+            panic!("File identifier of file '{}' is incorrect!", path);
         }
 
         file.seek_relative(8).unwrap();

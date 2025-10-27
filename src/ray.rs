@@ -51,6 +51,23 @@ impl Ray {
             normal = normal.reversed();
         }
 
+        let t_0: Vec3f = Vec3f::new(
+            tri.vertices[0].tex_coord[0],
+            tri.vertices[0].tex_coord[1],
+            0.0,
+        );
+        let t_1: Vec3f = Vec3f::new(
+            tri.vertices[1].tex_coord[0],
+            tri.vertices[1].tex_coord[1],
+            0.0,
+        );
+        let t_2: Vec3f = Vec3f::new(
+            tri.vertices[2].tex_coord[0],
+            tri.vertices[2].tex_coord[1],
+            0.0,
+        );
+        let uv = (t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v)).xy();
+
         return HitInfo {
             has_hit: t > 0.0001
                 && !(det < 0.0 && det > -0.0)
@@ -59,6 +76,7 @@ impl Ray {
             point: hit_point,
             normal: normal,
             distance: t,
+            uv: uv,
             material_id: tri.material_id,
             front_face: front_face,
         };
@@ -157,7 +175,13 @@ impl Ray {
 
                 *ray = Self::new(hit_info.point + new_dir * RAY_HIT_OFFSET, new_dir);
 
-                ray_color *= hit_material.base_color;
+                if hit_material.texture_id != -1 {
+                    ray_color *= Vec3f::from(
+                        scene.textures[hit_material.texture_id as usize].color_at(hit_info.uv),
+                    );
+                } else {
+                    ray_color *= hit_material.base_color;
+                }
                 emitted_light += hit_material.emission;
                 incoming_light += emitted_light * ray_color;
 
@@ -188,6 +212,7 @@ struct HitInfo {
     point: Vec3f,
     normal: Vec3f,
     distance: f32,
+    uv: [f32; 2],
     material_id: usize,
     front_face: bool,
 }
@@ -199,6 +224,7 @@ impl Default for HitInfo {
             point: Vec3f::default(),
             normal: Vec3f::default(),
             distance: f32::MAX,
+            uv: [0.0; 2],
             material_id: 0,
             front_face: false,
         };

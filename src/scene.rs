@@ -1,12 +1,14 @@
 use crate::Vec3f;
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
+use crate::texture::Texture;
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
 pub struct Scene {
     pub tris: Vec<Triangle>,
     pub materials: Vec<Material>,
+    pub textures: Vec<Texture>,
     pub bvh: BVH,
 }
 
@@ -47,6 +49,7 @@ impl From<OBJ> for Scene {
         }
 
         scene.materials = obj.materials;
+        scene.textures = obj.textures;
 
         BVH::build(&mut scene);
 
@@ -103,6 +106,7 @@ pub struct Material {
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
+    pub texture_id: i32,
 }
 
 impl Default for Material {
@@ -116,6 +120,7 @@ impl Default for Material {
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
+            texture_id: -1,
         };
     }
 }

@@ -1,4 +1,4 @@
-use crate::{Vec3f, scene::Material};
+use crate::{Vec3f, scene::Material, texture::Texture};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -6,19 +6,19 @@ pub struct OBJ {
     pub tris: Vec<Triangle>,
     pub vertex_buffer: VertexBuffer,
     pub materials: Vec<Material>,
+    pub textures: Vec<Texture>,
 }
 
 impl OBJ {
     pub fn load(path: &str) -> Self {
+        let mut obj = OBJ::default();
+
         let start_time = std::time::Instant::now();
 
         let buffer = std::fs::read_to_string(path).unwrap();
         let lines = buffer
             .lines()
             .filter(|line| !line.trim_start().starts_with("#"));
-
-        let mut tris: Vec<Triangle> = Vec::new();
-        let materials: Vec<Material>;
 
         let mtl_lib = lines
             .clone()
@@ -28,13 +28,11 @@ impl OBJ {
             let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
             mtl_path.push('/');
             mtl_path.push_str(mtl_name);
-            materials = Self::load_mtl(mtl_path.as_str());
+            Self::load_mtl(&mut obj, mtl_path.as_str());
         } else {
-            materials = vec![Material::default()];
+            obj.materials = vec![Material::default()];
         }
 
-        // Vertices
-        let mut vertex_buffer = VertexBuffer::default();
         lines.clone().for_each(|line| {
             let mut split = line.split_whitespace();
             match split.nth(0).unwrap() {
@@ -43,21 +41,21 @@ impl OBJ {
                     for (i, value) in split.enumerate() {
                         data[i] = value.parse::<f32>().unwrap();
                     }
-                    vertex_buffer.positions.push(data);
+                    obj.vertex_buffer.positions.push(data);
                 }
                 "vt" => {
                     let mut data: [f32; 2] = [0.0; 2];
                     for (i, value) in split.enumerate() {
                         data[i] = value.parse::<f32>().unwrap();
                     }
-                    vertex_buffer.tex_coords.push(data);
+                    obj.vertex_buffer.tex_coords.push(data);
                 }
                 "vn" => {
                     let mut data: [f32; 3] = [0.0; 3];
                     for (i, value) in split.enumerate() {
                         data[i] = value.parse::<f32>().unwrap();
                     }
-                    vertex_buffer.normals.push(data);
+                    obj.vertex_buffer.normals.push(data);
                 }
                 _ => (),
             }
@@ -67,27 +65,28 @@ impl OBJ {
         let mut active_material_id: usize = 0;
         for line in lines {
             if line.trim_start().starts_with("usemtl ") {
-                active_material_id = materials
+                active_material_id = obj
+                    .materials
                     .iter()
                     .position(|mtl| mtl.name == line.strip_prefix("usemtl ").unwrap())
                     .unwrap();
             } else if line.trim_start().starts_with("f ") {
                 let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
                 tri.material_id = active_material_id;
-                tris.push(tri);
+                obj.tris.push(tri);
             }
         }
 
         // Precalculating vertex normals
-        if vertex_buffer.normals.is_empty() {
-            for (i, tri) in tris.iter_mut().enumerate() {
-                let v_1 = Vec3f::from(vertex_buffer.positions[tri.positions[0]]);
-                let v_2 = Vec3f::from(vertex_buffer.positions[tri.positions[1]]);
-                let v_3 = Vec3f::from(vertex_buffer.positions[tri.positions[2]]);
+        if obj.vertex_buffer.normals.is_empty() {
+            for (i, tri) in obj.tris.iter_mut().enumerate() {
+                let v_1 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[0]]);
+                let v_2 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[1]]);
+                let v_3 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[2]]);
                 let u = v_2 - v_1;
                 let v = v_3 - v_1;
                 let n = Vec3f::cross(u, v).normalized();
-                vertex_buffer.normals.push(n.data);
+                obj.vertex_buffer.normals.push(n.data);
                 tri.normals[0] = i;
                 tri.normals[1] = i;
                 tri.normals[2] = i;
@@ -100,17 +99,10 @@ impl OBJ {
             start_time.elapsed().as_millis()
         );
 
-        return OBJ {
-            tris,
-            vertex_buffer,
-            materials,
-        };
+        return obj;
     }
 
-    // TODO: Refactor this to be more like the .obj loading function.
-    fn load_mtl(path: &str) -> Vec<Material> {
-        let mut material_buffer: Vec<Material> = Vec::new();
-
+    fn load_mtl(obj: &mut OBJ, path: &str) {
         let buffer = std::fs::read_to_string(path).unwrap();
         let mut lines = buffer
             .lines()
@@ -167,15 +159,18 @@ impl OBJ {
                         "Tf" => {
                             material.transmission = attribute.next().unwrap().parse().unwrap();
                         }
+                        "map_Kd" => {
+                            obj.textures
+                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
+                            material.texture_id = (obj.textures.len() - 1) as i32;
+                        }
                         _ => continue,
                     }
                 }
 
-                material_buffer.push(material);
+                obj.materials.push(material);
             }
         }
-
-        return material_buffer;
     }
 }
 
