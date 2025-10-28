@@ -53,7 +53,7 @@ impl BMP {
 
         let mut color_buffer: Vec<[u8; 3]> = Vec::new();
         color_buffer.reserve_exact(pixel_byte_buffer.len() / 3);
-        for i in (0..pixel_byte_buffer.len()).step_by(3).rev() {
+        for i in (0..pixel_byte_buffer.len()).step_by(3) {
             let color: [u8; 3] = [
                 pixel_byte_buffer[i + 2],
                 pixel_byte_buffer[i + 1],
