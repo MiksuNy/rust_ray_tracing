@@ -13,13 +13,16 @@ impl Texture {
     }
 
     pub fn color_at(&self, uv: [f32; 2]) -> [u8; 3] {
-        let i: usize = (uv[0] * self.width as f32) as usize;
-        let j: usize = (uv[1] * self.height as f32) as usize;
-        let mut index: usize = i + (j * self.width);
-        while index > self.pixel_data.len() - 1 {
-            index -= self.pixel_data.len() - 1;
+        let i: i32 = (uv[0] * self.width as f32) as i32;
+        let j: i32 = (uv[1] * self.height as f32) as i32;
+        let mut index: i32 = i + (j * self.width as i32);
+        while index > self.pixel_data.len() as i32 - 1 {
+            index -= self.pixel_data.len() as i32 - 1;
         }
-        return self.pixel_data[index];
+        while index < 0 {
+            index += self.pixel_data.len() as i32 - 1;
+        }
+        return self.pixel_data[index as usize];
     }
 }
 
