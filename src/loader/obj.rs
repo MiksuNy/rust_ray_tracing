@@ -159,10 +159,18 @@ impl OBJ {
                         "Tf" => {
                             material.transmission = attribute.next().unwrap().parse().unwrap();
                         }
+                        // NOTE: Materials can have duplicate textures, this might not be a problem
+                        // for smaller scenes but maybe we should check if a texture is already in
+                        // memory and just use that instead of duplicating?
                         "map_Kd" => {
                             obj.textures
                                 .push(Texture::load_from_bmp(attribute.next().unwrap()));
-                            material.texture_id = (obj.textures.len() - 1) as i32;
+                            material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                        }
+                        "map_Ke" => {
+                            obj.textures
+                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
+                            material.emission_tex_id = (obj.textures.len() - 1) as i32;
                         }
                         _ => continue,
                     }

@@ -106,7 +106,8 @@ pub struct Material {
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
-    pub texture_id: i32,
+    pub base_color_tex_id: i32,
+    pub emission_tex_id: i32,
 }
 
 impl Default for Material {
@@ -120,7 +121,8 @@ impl Default for Material {
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
-            texture_id: -1,
+            base_color_tex_id: -1,
+            emission_tex_id: -1,
         };
     }
 }

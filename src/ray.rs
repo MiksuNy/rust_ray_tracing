@@ -175,20 +175,27 @@ impl Ray {
 
                 *ray = Self::new(hit_info.point + new_dir * RAY_HIT_OFFSET, new_dir);
 
-                if hit_material.texture_id != -1 {
+                if hit_material.base_color_tex_id != -1 {
                     ray_color *= Vec3f::from(
-                        scene.textures[hit_material.texture_id as usize].color_at(hit_info.uv),
+                        scene.textures[hit_material.base_color_tex_id as usize]
+                            .color_at(hit_info.uv),
                     );
                 } else {
                     ray_color *= hit_material.base_color;
                 }
-                emitted_light += hit_material.emission;
+                if hit_material.emission_tex_id != -1 {
+                    emitted_light += Vec3f::from(
+                        scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
+                    );
+                } else {
+                    emitted_light += hit_material.emission;
+                }
                 incoming_light += emitted_light * ray_color;
 
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                let sky_strength = Vec3f::from(1.0);
+                let sky_strength = Vec3f::from(0.0);
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;
