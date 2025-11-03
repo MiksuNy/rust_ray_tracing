@@ -3,6 +3,10 @@ use crate::bvh::Node;
 use crate::scene::{Scene, Triangle};
 use crate::vector::Vec3Swizzles;
 
+// NOTE: This is used when moving the ray towards a new direction on bounce AND for increasing node
+// bounds by a tiny amount when checking intersections with rays to prevent visual holes in models
+const RAY_HIT_OFFSET: f32 = 0.0001;
+
 #[derive(Clone, Copy)]
 pub struct Ray {
     pub origin: Vec3f,
@@ -47,15 +51,33 @@ impl Ray {
             normal = normal.reversed();
         }
 
+        let t_0: Vec3f = Vec3f::new(
+            tri.vertices[0].tex_coord[0],
+            tri.vertices[0].tex_coord[1],
+            0.0,
+        );
+        let t_1: Vec3f = Vec3f::new(
+            tri.vertices[1].tex_coord[0],
+            tri.vertices[1].tex_coord[1],
+            0.0,
+        );
+        let t_2: Vec3f = Vec3f::new(
+            tri.vertices[2].tex_coord[0],
+            tri.vertices[2].tex_coord[1],
+            0.0,
+        );
+        let uv = (t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v)).xy();
+
         return HitInfo {
             has_hit: t > 0.0001
                 && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
-            hit_point: hit_point,
-            hit_normal: normal,
-            hit_distance: t,
-            hit_material_id: tri.material_id,
+            point: hit_point,
+            normal: normal,
+            distance: t,
+            uv: uv,
+            material_id: tri.material_id,
             front_face: front_face,
         };
     }
@@ -63,8 +85,9 @@ impl Ray {
     fn intersect_node(ray: &Self, node: &Node) -> bool {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
-        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(0.0001);
-        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(0.0001);
+        // NOTE: Adding and subtracting tiny amounts from t_1 and t_2 feels very hacky and not good
+        let t_1 = Vec3f::min(t_min, t_max) - Vec3f::from(RAY_HIT_OFFSET);
+        let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(RAY_HIT_OFFSET);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
         return t_near < t_far && t_far > 0.0;
@@ -79,7 +102,7 @@ impl Ray {
         if node.num_tris > 0 {
             for i in 0..node.num_tris {
                 let temp_hit_info = Self::intersect_tri(ray, &scene.tris[node.first_tri_id + i]);
-                if temp_hit_info.has_hit && temp_hit_info.hit_distance < hit_info.hit_distance {
+                if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
                     *hit_info = temp_hit_info;
                 }
             }
@@ -137,7 +160,7 @@ impl Ray {
             }
 
             if hit_info.has_hit {
-                let hit_material = &scene.materials[hit_info.hit_material_id];
+                let hit_material = &scene.materials[hit_info.material_id];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
@@ -147,19 +170,32 @@ impl Ray {
 
                 // Lambertian diffuse
                 let diffuse =
-                    (hit_info.hit_normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
+                    (hit_info.normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
                 let new_dir = diffuse;
 
-                *ray = Self::new(hit_info.hit_point + new_dir * 0.0001, new_dir);
+                *ray = Self::new(hit_info.point + new_dir * RAY_HIT_OFFSET, new_dir);
 
-                ray_color *= hit_material.base_color;
-                emitted_light += hit_material.emission;
+                if hit_material.base_color_tex_id != -1 {
+                    ray_color *= Vec3f::from(
+                        scene.textures[hit_material.base_color_tex_id as usize]
+                            .color_at(hit_info.uv),
+                    );
+                } else {
+                    ray_color *= hit_material.base_color;
+                }
+                if hit_material.emission_tex_id != -1 {
+                    emitted_light += Vec3f::from(
+                        scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
+                    );
+                } else {
+                    emitted_light += hit_material.emission;
+                }
                 incoming_light += emitted_light * ray_color;
 
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                let sky_strength = Vec3f::from(1.0);
+                let sky_strength = Vec3f::from(0.0);
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;
@@ -180,10 +216,11 @@ impl Ray {
 
 struct HitInfo {
     has_hit: bool,
-    hit_point: Vec3f,
-    hit_normal: Vec3f,
-    hit_distance: f32,
-    hit_material_id: usize,
+    point: Vec3f,
+    normal: Vec3f,
+    distance: f32,
+    uv: [f32; 2],
+    material_id: usize,
     front_face: bool,
 }
 
@@ -191,10 +228,11 @@ impl Default for HitInfo {
     fn default() -> Self {
         return Self {
             has_hit: false,
-            hit_point: Vec3f::default(),
-            hit_normal: Vec3f::default(),
-            hit_distance: f32::MAX,
-            hit_material_id: 0,
+            point: Vec3f::default(),
+            normal: Vec3f::default(),
+            distance: f32::MAX,
+            uv: [0.0; 2],
+            material_id: 0,
             front_face: false,
         };
     }

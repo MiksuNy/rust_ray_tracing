@@ -13,7 +13,7 @@ impl BMP {
         let identifier_buf: &mut [u8; 2] = &mut [0; 2];
         file.read_exact(identifier_buf).unwrap();
         if identifier_buf != b"BM" {
-            panic!("File identifier is incorrect!");
+            panic!("File identifier of file '{}' is incorrect!", path);
         }
 
         file.seek_relative(8).unwrap();
@@ -53,7 +53,7 @@ impl BMP {
 
         let mut color_buffer: Vec<[u8; 3]> = Vec::new();
         color_buffer.reserve_exact(pixel_byte_buffer.len() / 3);
-        for i in (0..pixel_byte_buffer.len()).step_by(3).rev() {
+        for i in (0..pixel_byte_buffer.len()).step_by(3) {
             let color: [u8; 3] = [
                 pixel_byte_buffer[i + 2],
                 pixel_byte_buffer[i + 1],

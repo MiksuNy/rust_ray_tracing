@@ -22,10 +22,37 @@ impl BVH {
 
         Self::split_node(0, &mut bvh, scene);
 
-        eprintln!("BVH length:\t{}", bvh.nodes.len());
+        let mut leaf_node_count: usize = 0;
+        let mut avg_tri_count: f32 = 0.0;
+        let mut min_tri_count: usize = usize::MAX;
+        let mut max_tri_count: usize = 0;
+        bvh.nodes.iter().for_each(|node| {
+            if node.children_id == 0 {
+                leaf_node_count += 1;
+                if node.num_tris > max_tri_count {
+                    max_tri_count = node.num_tris;
+                } else if node.num_tris < min_tri_count {
+                    min_tri_count = node.num_tris;
+                }
+                avg_tri_count += node.num_tris as f32;
+            }
+        });
+        avg_tri_count /= leaf_node_count as f32;
+
         eprintln!(
-            "BVH took:\t{} ms to build",
-            start_time.elapsed().as_millis()
+            "BVH info
+            Build time:    {} ms
+            Total nodes:   {}
+            Leaf nodes:    {}
+            Avg leaf tris: {}
+            Min leaf tris: {}
+            Max leaf tris: {}\n",
+            start_time.elapsed().as_millis(),
+            bvh.nodes.len(),
+            leaf_node_count,
+            avg_tri_count,
+            min_tri_count,
+            max_tri_count,
         );
 
         scene.bvh = bvh;

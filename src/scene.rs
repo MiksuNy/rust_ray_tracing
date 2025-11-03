@@ -1,19 +1,20 @@
 use crate::Vec3f;
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
+use crate::texture::Texture;
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
 pub struct Scene {
     pub tris: Vec<Triangle>,
     pub materials: Vec<Material>,
+    pub textures: Vec<Texture>,
     pub bvh: BVH,
 }
 
 impl Scene {
     pub fn load_from_obj(path: &str) -> Self {
-        let obj = OBJ::load(path);
-        return Scene::from(obj);
+        return OBJ::load(path).into();
     }
 }
 
@@ -48,6 +49,7 @@ impl From<OBJ> for Scene {
         }
 
         scene.materials = obj.materials;
+        scene.textures = obj.textures;
 
         BVH::build(&mut scene);
 
@@ -98,11 +100,14 @@ impl Triangle {
 pub struct Material {
     pub name: String,
     pub base_color: Vec3f,
+    pub specular_tint: Vec3f,
     pub emission: Vec3f,
     pub transmission: f32,
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
+    pub base_color_tex_id: i32,
+    pub emission_tex_id: i32,
 }
 
 impl Default for Material {
@@ -110,11 +115,14 @@ impl Default for Material {
         return Self {
             name: String::from("default_material"),
             base_color: Vec3f::new(1.0, 1.0, 1.0),
+            specular_tint: Vec3f::new(1.0, 1.0, 1.0),
             emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
+            base_color_tex_id: -1,
+            emission_tex_id: -1,
         };
     }
 }
