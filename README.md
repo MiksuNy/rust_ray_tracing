@@ -35,6 +35,7 @@ The following dragon model is from https://benedikt-bitterli.me/resources/
 --------
 Chinese dragon model downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data)
 ![](chinese_dragon.png)
+--------
 
 # Resources & references
 - [This book series](https://raytracing.github.io/) is *the* best resource for anyone looking to start their own ray tracer.
