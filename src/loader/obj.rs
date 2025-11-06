@@ -202,6 +202,7 @@ pub struct Triangle {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseObjTriangleError;
 
+// FIXME: Add support for v/vt v/vt v/vt ASAP, also maybe just refactor this whole thing
 impl FromStr for Triangle {
     type Err = ParseObjTriangleError;
 
@@ -210,6 +211,7 @@ impl FromStr for Triangle {
     /// Acceptable formats are:
     /// v/vt/vn v/vt/vn v/vt/vn
     /// v//vn v//vn v//vn
+    /// v/vt v/vt v/vt TODO: Add this
     /// v v v
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut triangle = Triangle::default();
