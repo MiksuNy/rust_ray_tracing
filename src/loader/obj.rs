@@ -202,7 +202,6 @@ pub struct Triangle {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseObjTriangleError;
 
-// FIXME: Add support for v/vt v/vt v/vt ASAP, also maybe just refactor this whole thing
 impl FromStr for Triangle {
     type Err = ParseObjTriangleError;
 
@@ -211,15 +210,14 @@ impl FromStr for Triangle {
     /// Acceptable formats are:
     /// v/vt/vn v/vt/vn v/vt/vn
     /// v//vn v//vn v//vn
-    /// v/vt v/vt v/vt TODO: Add this
+    /// v/vt v/vt v/vt
     /// v v v
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut triangle = Triangle::default();
 
-        let vertices = s.split_whitespace();
-
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
+        let vertices = s.split_whitespace();
         for (vertex_id, vertex) in vertices.enumerate() {
             if vertex.contains("//") {
                 vertex.split("//").enumerate().for_each(|(i, str)| match i {
@@ -228,12 +226,21 @@ impl FromStr for Triangle {
                     _ => (),
                 });
             } else if vertex.contains("/") {
-                vertex.split("/").enumerate().for_each(|(i, str)| match i {
-                    0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    _ => (),
-                });
+                let split = vertex.split("/");
+                if split.clone().count() == 2 {
+                    split.enumerate().for_each(|(i, str)| match i {
+                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        _ => (),
+                    });
+                } else if split.clone().count() == 3 {
+                    split.enumerate().for_each(|(i, str)| match i {
+                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                        _ => (),
+                    });
+                }
             } else {
                 vertex.split(" ").for_each(|str| {
                     triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1
