@@ -8,8 +8,17 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn load_from_bmp(path: &str) -> Self {
-        return BMP::load(path).into();
+    pub fn load(path: &str) -> Option<Self> {
+        if !std::fs::exists(path).unwrap() {
+            eprintln!("ERROR: Could not find texture at path: '{}'\n", path);
+            return None;
+        }
+
+        let format = path.split(".").last().unwrap();
+        match format {
+            "bmp" => Some(BMP::load(path).into()),
+            _ => None,
+        }
     }
 
     pub fn color_at(&self, uv: [f32; 2]) -> [u8; 3] {

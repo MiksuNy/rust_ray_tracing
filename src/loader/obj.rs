@@ -163,14 +163,18 @@ impl OBJ {
                         // for smaller scenes but maybe we should check if a texture is already in
                         // memory and just use that instead of duplicating?
                         "map_Kd" => {
-                            obj.textures
-                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
-                            material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                            let texture = Texture::load(attribute.next().unwrap());
+                            if texture.is_some() {
+                                obj.textures.push(texture.unwrap());
+                                material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                            }
                         }
                         "map_Ke" => {
-                            obj.textures
-                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
-                            material.emission_tex_id = (obj.textures.len() - 1) as i32;
+                            let texture = Texture::load(attribute.next().unwrap());
+                            if texture.is_some() {
+                                obj.textures.push(texture.unwrap());
+                                material.emission_tex_id = (obj.textures.len() - 1) as i32;
+                            }
                         }
                         _ => continue,
                     }
