@@ -1,4 +1,4 @@
-use crate::{Vec3f, scene::Material, texture::Texture};
+use crate::{Vec3f, log_info, scene::Material, texture::Texture};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -93,8 +93,8 @@ impl OBJ {
             }
         }
 
-        eprintln!(
-            "'{}' took:\t{} ms to load",
+        log_info!(
+            "'{}' took {} ms to load",
             path,
             start_time.elapsed().as_millis()
         );

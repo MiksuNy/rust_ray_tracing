@@ -6,6 +6,7 @@ use crate::vector::Vec3f;
 mod bvh;
 mod image;
 mod loader;
+mod log;
 mod ray;
 mod scene;
 mod texture;
@@ -18,7 +19,7 @@ const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
 const DEBUG_BVH: bool = false;
 const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/cornell_box.obj";
+const OBJ_PATH: &str = "../res/bistro/Interior/interior.obj";
 
 fn main() {
     // Initialize the prng to some big value
@@ -67,7 +68,7 @@ fn main() {
         utility::progress_bar("Rendering", (HEIGHT - y) as f32 / HEIGHT as f32, 30);
     }
 
-    eprintln!("\nRendering took\t{} ms", start_time.elapsed().as_millis());
+    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
     image.write_to_path(IMAGE_PATH);
 }
