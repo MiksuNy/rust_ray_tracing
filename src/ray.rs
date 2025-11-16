@@ -195,7 +195,7 @@ impl Ray {
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                let sky_strength = Vec3f::from(0.0);
+                let sky_strength = Vec3f::from(1.0);
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;

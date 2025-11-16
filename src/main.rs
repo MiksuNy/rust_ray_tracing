@@ -26,7 +26,9 @@ fn main() {
     let mut rng_state: u32 = 987612486;
 
     let mut image: PPM = Image::new(WIDTH, HEIGHT);
-    let scene = Scene::load_from_obj(OBJ_PATH);
+    let Some(scene) = Scene::load(OBJ_PATH) else {
+        return;
+    };
 
     let start_time = std::time::Instant::now();
 
@@ -40,7 +42,7 @@ fn main() {
             for _ in 0..SAMPLE_COUNT {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3f::new(0.0, 0.0, 3.0),
+                    Vec3f::new(0.0, 0.0, 0.0),
                     Vec3f::new(
                         screen_x + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
                         screen_y + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,

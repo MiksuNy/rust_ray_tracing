@@ -1,7 +1,7 @@
-use crate::Vec3f;
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
 use crate::texture::Texture;
+use crate::{Vec3f, log_error};
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -13,8 +13,20 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn load_from_obj(path: &str) -> Self {
-        return OBJ::load(path).into();
+    pub fn load(path: &str) -> Option<Self> {
+        if !std::fs::exists(path).unwrap() {
+            log_error!("Could not find scene at path: '{}'", path);
+            return None;
+        }
+
+        let format = path.split(".").last().unwrap();
+        match format {
+            "obj" => Some(OBJ::load(path).into()),
+            _ => {
+                log_error!("Unsupported scene format '{}' at path '{}'", format, path);
+                return None;
+            }
+        }
     }
 }
 
