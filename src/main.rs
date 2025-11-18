@@ -23,8 +23,6 @@ const IMAGE_PATH: &str = "output.ppm";
 const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 
 fn main() {
-    // Initialize the prng to some big value
-
     let mut image: PPM = Image::new(WIDTH, HEIGHT);
     let Some(scene) = Scene::load(OBJ_PATH) else {
         return;
