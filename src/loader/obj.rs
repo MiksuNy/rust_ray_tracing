@@ -24,6 +24,8 @@ impl OBJ {
             .clone()
             .find(|line| line.trim_start().starts_with("mtllib"));
         if mtl_lib.is_some() {
+            // NOTE: This only works for .mtl files in the same folder as the .obj file. Good
+            // enough for now but should be revisited at some point.
             let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
             let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
             mtl_path.push('/');
