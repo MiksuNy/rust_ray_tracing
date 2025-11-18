@@ -223,34 +223,44 @@ impl FromStr for Triangle {
 
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
+        let read_index = |index_str: &str| -> usize {
+            if index_str.parse::<i32>().unwrap() < 1 {
+                panic!("Negative indices are not supported for OBJ!");
+            }
+            return index_str.parse::<usize>().unwrap() - 1;
+        };
+
         let vertices = s.split_whitespace();
         for (vertex_id, vertex) in vertices.enumerate() {
             if vertex.contains("//") {
-                vertex.split("//").enumerate().for_each(|(i, str)| match i {
-                    0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    1 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    _ => (),
-                });
+                vertex
+                    .split("//")
+                    .enumerate()
+                    .for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.normals[vertex_id] = read_index(index_str),
+                        _ => (),
+                    });
             } else if vertex.contains("/") {
                 let split = vertex.split("/");
                 if split.clone().count() == 2 {
-                    split.enumerate().for_each(|(i, str)| match i {
-                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                    split.enumerate().for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
                         _ => (),
                     });
                 } else if split.clone().count() == 3 {
-                    split.enumerate().for_each(|(i, str)| match i {
-                        0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                        1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                        2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
+                    split.enumerate().for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
+                        2 => triangle.normals[vertex_id] = read_index(index_str),
                         _ => (),
                     });
                 }
             } else {
-                vertex.split(" ").for_each(|str| {
-                    triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1
-                });
+                vertex
+                    .split(" ")
+                    .for_each(|index_str| triangle.positions[vertex_id] = read_index(index_str));
             }
         }
 
