@@ -23,6 +23,15 @@ const IMAGE_PATH: &str = "output.ppm";
 const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 
 fn main() {
+    log_info!("Parameters");
+    log_info!("- Width:        {}", WIDTH);
+    log_info!("- Height:       {}", HEIGHT);
+    log_info!("- Sample count: {}", SAMPLE_COUNT);
+    log_info!("- Max bounces:  {}", MAX_BOUNCES);
+    log_info!("- BVH debug:    {}", DEBUG_BVH);
+    log_info!("- Input file:   {}", OBJ_PATH);
+    log_info!("- Output file:  {}\n", IMAGE_PATH);
+
     let mut image: PPM = Image::new(WIDTH, HEIGHT);
     let Some(scene) = Scene::load(OBJ_PATH) else {
         return;

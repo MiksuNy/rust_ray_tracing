@@ -41,12 +41,12 @@ impl BVH {
         avg_tri_count /= leaf_node_count as f32;
 
         log_info!("BVH statistics");
-        log_info!("Build time:    {} ms", start_time.elapsed().as_millis());
-        log_info!("Total nodes:   {}", bvh.nodes.len());
-        log_info!("Leaf nodes:    {}", leaf_node_count);
-        log_info!("Avg leaf tris: {}", avg_tri_count);
-        log_info!("Min leaf tris: {}", min_tri_count);
-        log_info!("Max leaf tris: {}\n", max_tri_count);
+        log_info!("- Build time:    {} ms", start_time.elapsed().as_millis());
+        log_info!("- Total nodes:   {}", bvh.nodes.len());
+        log_info!("- Leaf nodes:    {}", leaf_node_count);
+        log_info!("- Avg leaf tris: {}", avg_tri_count);
+        log_info!("- Min leaf tris: {}", min_tri_count);
+        log_info!("- Max leaf tris: {}\n", max_tri_count);
 
         scene.bvh = bvh;
     }

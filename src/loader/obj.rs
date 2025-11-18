@@ -94,7 +94,7 @@ impl OBJ {
         }
 
         log_info!(
-            "'{}' took {} ms to load",
+            "'{}' took {} ms to load\n",
             path,
             start_time.elapsed().as_millis()
         );
