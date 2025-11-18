@@ -15,7 +15,7 @@ Todo
 - Support for other output image formats (.bmp, .png)
 - glTF support
 - Better BVH
-- Multithreaded rendering
+- Better multithreaded rendering
 
 Todo (later)
 --------
@@ -23,7 +23,7 @@ Todo (later)
 
 Known issues
 --------
-- Some .obj exporters don't work with this. The best way to get around this is to bring the model into Blender and export again.
+- Some .obj exporters might not work with this for various reasons (negative indices, etc.). The best way to get around this is to bring the model into Blender and export again.
 
 Gallery
 --------
