@@ -1,4 +1,4 @@
-use crate::{Vec3f, scene::Material, texture::Texture};
+use crate::{Vec3f, log_info, scene::Material, texture::Texture};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -24,6 +24,8 @@ impl OBJ {
             .clone()
             .find(|line| line.trim_start().starts_with("mtllib"));
         if mtl_lib.is_some() {
+            // NOTE: This only works for .mtl files in the same folder as the .obj file. Good
+            // enough for now but should be revisited at some point.
             let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
             let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
             mtl_path.push('/');
@@ -93,8 +95,8 @@ impl OBJ {
             }
         }
 
-        eprintln!(
-            "'{}' took:\t{} ms to load",
+        log_info!(
+            "'{}' took {} ms to load\n",
             path,
             start_time.elapsed().as_millis()
         );
@@ -163,14 +165,18 @@ impl OBJ {
                         // for smaller scenes but maybe we should check if a texture is already in
                         // memory and just use that instead of duplicating?
                         "map_Kd" => {
-                            obj.textures
-                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
-                            material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                            let texture = Texture::load(attribute.next().unwrap());
+                            if texture.is_some() {
+                                obj.textures.push(texture.unwrap());
+                                material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                            }
                         }
                         "map_Ke" => {
-                            obj.textures
-                                .push(Texture::load_from_bmp(attribute.next().unwrap()));
-                            material.emission_tex_id = (obj.textures.len() - 1) as i32;
+                            let texture = Texture::load(attribute.next().unwrap());
+                            if texture.is_some() {
+                                obj.textures.push(texture.unwrap());
+                                material.emission_tex_id = (obj.textures.len() - 1) as i32;
+                            }
                         }
                         _ => continue,
                     }
@@ -210,32 +216,51 @@ impl FromStr for Triangle {
     /// Acceptable formats are:
     /// v/vt/vn v/vt/vn v/vt/vn
     /// v//vn v//vn v//vn
+    /// v/vt v/vt v/vt
     /// v v v
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut triangle = Triangle::default();
 
-        let vertices = s.split_whitespace();
-
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
+        let read_index = |index_str: &str| -> usize {
+            if index_str.parse::<i32>().unwrap() < 1 {
+                panic!("Negative indices are not supported for OBJ!");
+            }
+            return index_str.parse::<usize>().unwrap() - 1;
+        };
+
+        let vertices = s.split_whitespace();
         for (vertex_id, vertex) in vertices.enumerate() {
             if vertex.contains("//") {
-                vertex.split("//").enumerate().for_each(|(i, str)| match i {
-                    0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    1 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    _ => (),
-                });
+                vertex
+                    .split("//")
+                    .enumerate()
+                    .for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.normals[vertex_id] = read_index(index_str),
+                        _ => (),
+                    });
             } else if vertex.contains("/") {
-                vertex.split("/").enumerate().for_each(|(i, str)| match i {
-                    0 => triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    1 => triangle.tex_coords[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    2 => triangle.normals[vertex_id] = str.parse::<usize>().unwrap() - 1,
-                    _ => (),
-                });
+                let split = vertex.split("/");
+                if split.clone().count() == 2 {
+                    split.enumerate().for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
+                        _ => (),
+                    });
+                } else if split.clone().count() == 3 {
+                    split.enumerate().for_each(|(i, index_str)| match i {
+                        0 => triangle.positions[vertex_id] = read_index(index_str),
+                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
+                        2 => triangle.normals[vertex_id] = read_index(index_str),
+                        _ => (),
+                    });
+                }
             } else {
-                vertex.split(" ").for_each(|str| {
-                    triangle.positions[vertex_id] = str.parse::<usize>().unwrap() - 1
-                });
+                vertex
+                    .split(" ")
+                    .for_each(|index_str| triangle.positions[vertex_id] = read_index(index_str));
             }
         }
 

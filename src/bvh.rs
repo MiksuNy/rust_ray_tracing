@@ -1,4 +1,5 @@
 use crate::{
+    log_info,
     scene::{Scene, Triangle},
     vector::{Vec3Swizzles, Vec3f},
 };
@@ -39,21 +40,13 @@ impl BVH {
         });
         avg_tri_count /= leaf_node_count as f32;
 
-        eprintln!(
-            "BVH info
-            Build time:    {} ms
-            Total nodes:   {}
-            Leaf nodes:    {}
-            Avg leaf tris: {}
-            Min leaf tris: {}
-            Max leaf tris: {}\n",
-            start_time.elapsed().as_millis(),
-            bvh.nodes.len(),
-            leaf_node_count,
-            avg_tri_count,
-            min_tri_count,
-            max_tri_count,
-        );
+        log_info!("BVH statistics");
+        log_info!("- Build time:    {} ms", start_time.elapsed().as_millis());
+        log_info!("- Total nodes:   {}", bvh.nodes.len());
+        log_info!("- Leaf nodes:    {}", leaf_node_count);
+        log_info!("- Avg leaf tris: {}", avg_tri_count);
+        log_info!("- Min leaf tris: {}", min_tri_count);
+        log_info!("- Max leaf tris: {}\n", max_tri_count);
 
         scene.bvh = bvh;
     }

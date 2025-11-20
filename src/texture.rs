@@ -1,4 +1,4 @@
-use crate::loader::bmp::BMP;
+use crate::{loader::bmp::BMP, log_error, log_warning};
 
 #[derive(Clone, Default)]
 pub struct Texture {
@@ -8,8 +8,20 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn load_from_bmp(path: &str) -> Self {
-        return BMP::load(path).into();
+    pub fn load(path: &str) -> Option<Self> {
+        if !std::fs::exists(path).unwrap() {
+            log_error!("Could not find texture at path: '{}'", path);
+            return None;
+        }
+
+        let format = path.split(".").last().unwrap();
+        match format {
+            "bmp" => Some(BMP::load(path).into()),
+            _ => {
+                log_warning!("Unsupported texture format '{}'", format);
+                return None;
+            }
+        }
     }
 
     pub fn color_at(&self, uv: [f32; 2]) -> [u8; 3] {

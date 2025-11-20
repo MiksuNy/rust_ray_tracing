@@ -2,10 +2,12 @@ use crate::image::{Image, PPM};
 use crate::ray::Ray;
 use crate::scene::Scene;
 use crate::vector::Vec3f;
+use rayon::prelude::*;
 
 mod bvh;
 mod image;
 mod loader;
+mod log;
 mod ray;
 mod scene;
 mod texture;
@@ -14,25 +16,41 @@ mod vector;
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const ASPECT: f32 = WIDTH as f32 / HEIGHT as f32;
-const SAMPLE_COUNT: usize = 1;
+const SAMPLE_COUNT: usize = 100;
 const MAX_BOUNCES: usize = 6;
 const DEBUG_BVH: bool = false;
 const IMAGE_PATH: &str = "output.ppm";
 const OBJ_PATH: &str = "../res/cornell_box.obj";
 
 fn main() {
-    // Initialize the prng to some big value
-    let mut rng_state: u32 = 987612486;
+    log_info!("System logical cores: {}\n", rayon::current_num_threads());
+
+    log_info!("Parameters");
+    log_info!("- Width:        {}", WIDTH);
+    log_info!("- Height:       {}", HEIGHT);
+    log_info!("- Sample count: {}", SAMPLE_COUNT);
+    log_info!("- Max bounces:  {}", MAX_BOUNCES);
+    log_info!("- BVH debug:    {}", DEBUG_BVH);
+    log_info!("- Input file:   {}", OBJ_PATH);
+    log_info!("- Output file:  {}\n", IMAGE_PATH);
 
     let mut image: PPM = Image::new(WIDTH, HEIGHT);
-    let scene = Scene::load_from_obj(OBJ_PATH);
+    let Some(scene) = Scene::load(OBJ_PATH) else {
+        return;
+    };
 
     let start_time = std::time::Instant::now();
 
-    for y in (0..HEIGHT).rev() {
-        for x in 0..WIDTH {
+    let block_size = (WIDTH * HEIGHT) / rayon::current_num_threads();
+    let pixel_data = (0..WIDTH * HEIGHT)
+        .into_par_iter()
+        .by_uniform_blocks(block_size)
+        .map(|index: usize| {
+            let mut rng_state: u32 =
+                987612486u32.wrapping_mul((index as u32).wrapping_add(87636354u32));
             let mut final_color = Vec3f::new(0.0, 0.0, 0.0);
-
+            let x: usize = index % WIDTH;
+            let y: usize = HEIGHT - (index / WIDTH);
             let screen_x = (((x as f32 / WIDTH as f32) * 2.0) - 1.0) * ASPECT;
             let screen_y = ((y as f32 / HEIGHT as f32) * 2.0) - 1.0;
 
@@ -56,18 +74,19 @@ fn main() {
                 }
             }
 
+            // TODO: Reimplement progress bar
+
             if !DEBUG_BVH {
                 final_color /= SAMPLE_COUNT as f32;
             }
             final_color = Vec3f::linear_to_gamma(final_color);
 
-            image.pixel_data.push(final_color.into());
-        }
+            return final_color.into();
+        });
 
-        utility::progress_bar("Rendering", (HEIGHT - y) as f32 / HEIGHT as f32, 30);
-    }
+    image.pixel_data = pixel_data.collect();
 
-    eprintln!("\nRendering took\t{} ms", start_time.elapsed().as_millis());
+    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
     image.write_to_path(IMAGE_PATH);
 }
