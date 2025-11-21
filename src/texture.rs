@@ -18,7 +18,7 @@ impl Texture {
         match format {
             "bmp" => Some(BMP::load(path).into()),
             _ => {
-                log_warning!("Unsupported texture format '{}'", format);
+                log_warning!("Unsupported texture format '{}' at path '{}'", format, path);
                 return None;
             }
         }
