@@ -31,6 +31,7 @@ Gallery
 --------
 The following dragon model is from https://benedikt-bitterli.me/resources/
 ![](dragon.png)
+![](dragon_translucent.png)
 ![](dragon_debug.png)
 --------
 Chinese dragon model downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data)
