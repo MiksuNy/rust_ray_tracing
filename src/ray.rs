@@ -147,9 +147,6 @@ impl Ray {
         let mut incoming_light = Vec3f::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3f::new(0.0, 0.0, 0.0);
 
-        let mut prev_hit_point: Vec3f = ray.origin;
-        let mut transmitted_distance: f32 = 0.0;
-
         let mut curr_bounces: usize = 0;
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
@@ -167,30 +164,18 @@ impl Ray {
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
-                    prev_hit_point = hit_info.point;
                 } else {
                     ior = hit_material.ior;
-                    transmitted_distance = Vec3f::distance(hit_info.point, prev_hit_point);
                 }
 
-                let new_dir: Vec3f;
-                if Self::schlick_fresnel(Vec3f::dot(hit_info.normal, ray.direction.reversed()), ior)
-                    > Vec3f::rand_f32(rng_state)
-                {
-                    new_dir = Vec3f::reflect(ray.direction, hit_info.normal);
-                    ray_color *= hit_material.specular_tint;
+                if hit_material.base_color_tex_id != -1 {
+                    ray_color *= Vec3f::from(
+                        scene.textures[hit_material.base_color_tex_id as usize]
+                            .color_at(hit_info.uv),
+                    );
                 } else {
-                    new_dir = Vec3f::refract(ray.direction, hit_info.normal, ior);
-                    if hit_material.base_color_tex_id != -1 {
-                        ray_color *= Vec3f::from(
-                            scene.textures[hit_material.base_color_tex_id as usize]
-                                .color_at(hit_info.uv),
-                        );
-                    } else {
-                        ray_color *= hit_material.base_color;
-                    }
+                    ray_color *= hit_material.base_color;
                 }
-
                 if hit_material.emission_tex_id != -1 {
                     emitted_light += Vec3f::from(
                         scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
@@ -198,14 +183,10 @@ impl Ray {
                 } else {
                     emitted_light += hit_material.emission;
                 }
-                let absorption = Vec3f::new(
-                    f32::exp(-0.1 * transmitted_distance),
-                    f32::exp(-3.0 * transmitted_distance),
-                    f32::exp(-5.0 * transmitted_distance),
-                );
-                ray_color *= absorption;
                 incoming_light += emitted_light * ray_color;
 
+                let new_dir =
+                    (hit_info.normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
                 *ray = Self::new(hit_info.point + new_dir * RAY_HIT_OFFSET, new_dir);
 
                 curr_bounces += 1;

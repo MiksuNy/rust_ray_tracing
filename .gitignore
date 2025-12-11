@@ -1,5 +1,5 @@
 /target
-*.ppm
+/src/*.png
 /res/*.obj
 /res/*.mtl
 !/res/.keep

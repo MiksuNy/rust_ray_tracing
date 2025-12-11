@@ -1,4 +1,4 @@
-use crate::{loader::bmp::BMP, log_error, log_warning};
+use crate::log_error;
 
 #[derive(Clone, Default)]
 pub struct Texture {
@@ -14,14 +14,13 @@ impl Texture {
             return None;
         }
 
-        let format = path.split(".").last().unwrap();
-        match format {
-            "bmp" => Some(BMP::load(path).into()),
-            _ => {
-                log_warning!("Unsupported texture format '{}' at path '{}'", format, path);
-                return None;
-            }
-        }
+        let img = image::open(path).unwrap().flipv().to_rgb8();
+
+        Some(Self {
+            width: img.width() as usize,
+            height: img.height() as usize,
+            pixel_data: img.pixels().map(|pixel| pixel.0).collect(),
+        })
     }
 
     pub fn color_at(&self, uv: [f32; 2]) -> [u8; 3] {
@@ -35,15 +34,5 @@ impl Texture {
             index += self.pixel_data.len() as i32 - 1;
         }
         return self.pixel_data[index as usize];
-    }
-}
-
-impl From<BMP> for Texture {
-    fn from(bmp: BMP) -> Self {
-        return Self {
-            width: bmp.width as usize,
-            height: bmp.height as usize,
-            pixel_data: bmp.pixel_data,
-        };
     }
 }

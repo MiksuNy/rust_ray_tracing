@@ -1,6 +1,7 @@
+use crate::log_error;
 use crate::ray::Ray;
 use crate::vector::Vec3f;
-use crate::{image::Image, log_info, scene::Scene};
+use crate::{log_info, scene::Scene};
 use rayon::prelude::*;
 
 pub struct Renderer {
@@ -12,29 +13,31 @@ impl Renderer {
         return Self { parameters };
     }
 
-    pub fn render_to_image(&self, scene: &Scene, image: &mut Image) {
-        let block_size = (image.width * image.height) / rayon::current_num_threads();
-        image.bytes = (0..image.width * image.height)
+    pub fn render_scene_to_path(&self, scene: &Scene, path: &str, width: usize, height: usize) {
+        let start_time = std::time::Instant::now();
+
+        let block_size = (width * height) / rayon::current_num_threads();
+        let bytes = (0..width * height)
             .into_par_iter()
             .by_uniform_blocks(block_size)
             .map(|index: usize| {
                 let mut rng_state: u32 =
                     987612486u32.wrapping_mul((index as u32).wrapping_add(87636354u32));
                 let mut final_color = Vec3f::new(0.0, 0.0, 0.0);
-                let x: usize = index % image.width;
-                let y: usize = image.height - (index / image.width);
-                let screen_x = (((x as f32 / image.width as f32) * 2.0) - 1.0)
-                    * (image.width as f32 / image.height as f32);
-                let screen_y = ((y as f32 / image.height as f32) * 2.0) - 1.0;
+                let x: usize = index % width;
+                let y: usize = height - (index / width);
+                let screen_x =
+                    (((x as f32 / width as f32) * 2.0) - 1.0) * (width as f32 / height as f32);
+                let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
                 for _ in 0..self.parameters.samples {
                     let mut ray = Ray::new(
                         // Hard coded camera position
-                        Vec3f::new(0.0, 0.0, 8.0),
+                        Vec3f::new(0.0, 0.0, 0.0),
                         Vec3f::new(
                             screen_x + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
                             screen_y + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
-                            -4.0,
+                            -2.0,
                         )
                         .normalized(),
                     );
@@ -62,6 +65,26 @@ impl Renderer {
             })
             .collect::<Vec<[u8; 3]>>()
             .into_flattened();
+
+        log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
+
+        let image_result = image::save_buffer(
+            path,
+            bytes.as_slice(),
+            width as u32,
+            height as u32,
+            image::ColorType::Rgb8,
+        );
+
+        if image_result.is_err() {
+            log_error!(
+                "Could not write image data to '{}' with error {:?}",
+                path,
+                image_result.err()
+            );
+        } else {
+            log_info!("Succesfully wrote image data to '{}'", path);
+        }
     }
 }
 

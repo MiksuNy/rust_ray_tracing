@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 rayon = "1.11"
+image = "0.25.9"
 
 [profile.dev]
 opt-level = 3
