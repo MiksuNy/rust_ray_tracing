@@ -4,11 +4,9 @@ Features
 --------
 - Supports .obj models (only triangulated models, limited support for PBR materials)
 - Very limited support for textures (base color and emission for now)
-    - .bmp
 - Smooth shading (vertex normals)
 - BVH
-- Supported output image formats
-    - .ppm
+- Textures and output images use this [image](https://crates.io/crates/image) crate for decoding and encoding
 --------
 
 Todo (in order of priority)
@@ -18,7 +16,6 @@ Todo (in order of priority)
 - Command line arguments for scenes and other parameters
 - Scenes
     - glTF support
-- Support for other output image formats (.bmp, .png)
 - Better BVH
 - Better multithreaded rendering
 --------
