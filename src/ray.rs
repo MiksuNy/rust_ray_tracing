@@ -131,11 +131,6 @@ impl Ray {
         }
     }
 
-    fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
-        let f_0 = f32::powi(ior - 1.0, 2) / f32::powi(ior + 1.0, 2);
-        return f_0 + (1.0 - f_0) * f32::powi(1.0 - n_dot_v, 5);
-    }
-
     pub fn trace(
         ray: &mut Self,
         max_bounces: usize,
