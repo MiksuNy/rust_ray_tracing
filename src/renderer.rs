@@ -5,11 +5,11 @@ use crate::{log_info, scene::Scene};
 use rayon::prelude::*;
 
 pub struct Renderer {
-    pub parameters: Parameters,
+    pub parameters: RendererParameters,
 }
 
 impl Renderer {
-    pub fn new(parameters: Parameters) -> Self {
+    pub fn new(parameters: RendererParameters) -> Self {
         return Self { parameters };
     }
 
@@ -92,18 +92,18 @@ impl Default for Renderer {
     fn default() -> Self {
         log_info!("Using default renderer\n");
         return Self {
-            parameters: Parameters::default(),
+            parameters: RendererParameters::default(),
         };
     }
 }
 
-pub struct Parameters {
+pub struct RendererParameters {
     pub samples: usize,
     pub max_ray_depth: usize,
     pub debug_mode: bool,
 }
 
-impl Default for Parameters {
+impl Default for RendererParameters {
     fn default() -> Self {
         return Self {
             samples: 1,

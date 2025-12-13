@@ -1,4 +1,4 @@
-use crate::renderer::{Parameters, Renderer};
+use crate::renderer::{Renderer, RendererParameters};
 use crate::scene::Scene;
 use crate::vector::Vec3f;
 
@@ -13,7 +13,7 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 10;
+const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
 const DEBUG_BVH: bool = false;
 const OBJ_PATH: &str = "../res/bistro/Interior/interior.obj";
@@ -31,7 +31,7 @@ fn main() {
     log_info!("- Input scene:  {}", OBJ_PATH);
     log_info!("- Output image: {}\n", IMAGE_PATH);
 
-    let renderer = Renderer::new(Parameters {
+    let renderer = Renderer::new(RendererParameters {
         samples: SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         debug_mode: DEBUG_BVH,
