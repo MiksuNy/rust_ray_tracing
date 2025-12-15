@@ -1,4 +1,6 @@
-use crate::renderer::{Renderer, RendererParameters};
+use renderer::backend::RendererBackend;
+
+use crate::renderer::Renderer;
 use crate::scene::Scene;
 use crate::vector::Vec3f;
 
@@ -16,7 +18,7 @@ const HEIGHT: usize = 1080;
 const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
 const DEBUG_BVH: bool = false;
-const OBJ_PATH: &str = "../res/bistro/Interior/interior.obj";
+const OBJ_PATH: &str = "../res/dragon/dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -31,14 +33,16 @@ fn main() {
     log_info!("- Input scene:  {}", OBJ_PATH);
     log_info!("- Output image: {}\n", IMAGE_PATH);
 
-    let renderer = Renderer::new(RendererParameters {
+    let renderer = Renderer {
         samples: SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         debug_mode: DEBUG_BVH,
-    });
+        output_image_dimensions: (WIDTH, HEIGHT),
+        backend: RendererBackend::default(),
+    };
     let Some(scene) = Scene::load(OBJ_PATH) else {
         return;
     };
 
-    renderer.render_scene_to_path(&scene, IMAGE_PATH, WIDTH, HEIGHT);
+    renderer.render_scene_to_path(&scene, IMAGE_PATH);
 }
