@@ -3,3 +3,5 @@
 /res/*.obj
 /res/*.mtl
 !/res/.keep
+stderr
+stdout
