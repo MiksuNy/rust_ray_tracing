@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 // TODO: A simple progress indicator for rendering would be nice
 pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
-    log_info!("Rendering scene with CPU");
+    log_info!("Rendering scene with CPU backend");
     log_info!(
         "Using {} threads for rendering",
         rayon::current_num_threads()
