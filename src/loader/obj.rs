@@ -1,4 +1,4 @@
-use crate::{Vec3f, log_info, scene::Material, texture::Texture};
+use crate::{Vec3f, log_info, log_warning, scene::Material, texture::Texture};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -20,19 +20,34 @@ impl OBJ {
             .lines()
             .filter(|line| !line.trim_start().starts_with("#"));
 
+        let has_mtl: bool;
         let mtl_lib = lines
             .clone()
             .find(|line| line.trim_start().starts_with("mtllib"));
         if mtl_lib.is_some() {
-            // NOTE: This only works for .mtl files in the same folder as the .obj file. Good
-            // enough for now but should be revisited at some point.
+            // FIXME: This is really stupid, .mtl paths can be relative to the .obj directory so we
+            // prepend the .mtl path with the .obj path
             let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
             let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
             mtl_path.push('/');
             mtl_path.push_str(mtl_name);
-            Self::load_mtl(&mut obj, mtl_path.as_str());
+            let mtl_path_str = mtl_path.as_str();
+
+            if !std::fs::exists(mtl_path_str).unwrap() {
+                log_warning!(
+                    "An mtllib line was found but the corresponding .mtl file was not found"
+                );
+                log_info!("Using default material for scene");
+                obj.materials = vec![Material::default()];
+                has_mtl = false;
+            } else {
+                Self::load_mtl(&mut obj, mtl_path_str);
+                has_mtl = true;
+            }
         } else {
+            log_info!("No mtllib found, using default material for scene");
             obj.materials = vec![Material::default()];
+            has_mtl = false;
         }
 
         lines.clone().for_each(|line| {
@@ -66,7 +81,7 @@ impl OBJ {
         // Triangles
         let mut active_material_id: usize = 0;
         for line in lines {
-            if line.trim_start().starts_with("usemtl ") {
+            if line.trim_start().starts_with("usemtl ") && has_mtl {
                 active_material_id = obj
                     .materials
                     .iter()
