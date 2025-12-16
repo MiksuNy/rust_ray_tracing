@@ -1,5 +1,4 @@
-use crate::log_error;
-use crate::{log_info, scene::Scene};
+use crate::{log_error, log_info, scene::Scene};
 use backend::RendererBackend;
 
 pub mod backend;
@@ -13,6 +12,33 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    pub fn new(
+        samples: usize,
+        max_ray_depth: usize,
+        debug_mode: bool,
+        output_image_dimensions: (usize, usize),
+        backend: RendererBackend,
+    ) -> Option<Self> {
+        if output_image_dimensions.0 <= 0 || output_image_dimensions.1 <= 0 {
+            log_error!(
+                "Tried to create a renderer with invalid image dimensions: {}x{}",
+                output_image_dimensions.0,
+                output_image_dimensions.1
+            );
+            return None;
+        }
+        let renderer = Self {
+            samples,
+            max_ray_depth,
+            debug_mode,
+            output_image_dimensions,
+            backend,
+        };
+        renderer.log_info();
+
+        return Some(renderer);
+    }
+
     pub fn render_scene_to_path(&self, scene: &Scene, path: &str) {
         let start_time = std::time::Instant::now();
 
@@ -44,10 +70,24 @@ impl Renderer {
             log_info!("Succesfully wrote image data to '{}'", path);
         }
     }
+
+    fn log_info(&self) {
+        log_info!("Renderer info");
+        log_info!(
+            "- Output image dimensions: {}x{}",
+            self.output_image_dimensions.0,
+            self.output_image_dimensions.1
+        );
+        log_info!("- Sample count:            {}", self.samples);
+        log_info!("- Max bounces:             {}", self.max_ray_depth);
+        log_info!("- Debug mode:              {}", self.debug_mode);
+        log_info!("- Backend:                 {:?}\n", self.backend);
+    }
 }
 
 impl Default for Renderer {
     fn default() -> Self {
+        log_info!("Using default renderer");
         return Self {
             samples: 1,
             max_ray_depth: 6,

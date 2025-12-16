@@ -1,6 +1,6 @@
 pub mod cpu;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub enum RendererBackend {
     #[default]
     CPU,
