@@ -27,7 +27,7 @@ fn main() {
         MAX_BOUNCES,
         DEBUG_BVH,
         (WIDTH, HEIGHT),
-        RendererBackend::GPU,
+        RendererBackend::WGPU,
     ) else {
         return;
     };

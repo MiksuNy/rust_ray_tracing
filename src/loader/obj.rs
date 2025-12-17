@@ -89,7 +89,7 @@ impl OBJ {
                     .unwrap();
             } else if line.trim_start().starts_with("f ") {
                 let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-                tri.material_id = active_material_id;
+                tri.material_id = active_material_id as u32;
                 obj.tris.push(tri);
             }
         }
@@ -217,7 +217,7 @@ pub struct Triangle {
     pub positions: [usize; 3],
     pub tex_coords: [usize; 3],
     pub normals: [usize; 3],
-    pub material_id: usize,
+    pub material_id: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]

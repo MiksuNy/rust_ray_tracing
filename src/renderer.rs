@@ -44,7 +44,7 @@ impl Renderer {
 
         let bytes = match self.backend {
             RendererBackend::CPU => backend::cpu::render_scene(self, scene),
-            RendererBackend::GPU => pollster::block_on(backend::gpu::render_scene(self, scene)),
+            RendererBackend::WGPU => pollster::block_on(backend::gpu::render_scene(self, scene)),
         };
 
         log_info!("Rendering took {} ms", start_time.elapsed().as_millis());

@@ -1,7 +1,15 @@
-use crate::{log_info, renderer::Renderer, scene::Scene};
+use std::num::NonZeroU64;
+
+use wgpu::util::DeviceExt;
+
+use crate::{
+    log_info,
+    renderer::Renderer,
+    scene::{Scene, Triangle},
+};
 
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
-    log_info!("Rendering scene with GPU backend");
+    log_info!("Rendering scene with WGPU backend");
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let adapter =
@@ -51,26 +59,50 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         mapped_at_creation: false,
     });
 
+    let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(scene.tris.as_slice()),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::ReadWrite,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                view_dimension: wgpu::TextureViewDimension::D2,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::ReadWrite,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                count: None,
             },
-            count: None,
-        }],
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<Triangle>() as u64)).unwrap(),
+                },
+                count: None,
+            },
+        ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
         layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::TextureView(&storage_texture_view),
-        }],
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&storage_texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: triangle_buffer.as_entire_binding(),
+            },
+        ],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

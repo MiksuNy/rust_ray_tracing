@@ -43,16 +43,19 @@ impl From<OBJ> for Scene {
                         .positions
                         .get(obj_tri.positions[i])
                         .unwrap_or(&[0.0; 3]),
+                    _pad1: [0; 4],
                     normal: *obj
                         .vertex_buffer
                         .normals
                         .get(obj_tri.normals[i])
                         .unwrap_or(&[0.0; 3]),
+                    _pad2: [0; 4],
                     tex_coord: *obj
                         .vertex_buffer
                         .tex_coords
                         .get(obj_tri.tex_coords[i])
                         .unwrap_or(&[0.0; 2]),
+                    _pad3: [0; 8],
                 };
             }
             scene
@@ -69,24 +72,32 @@ impl From<OBJ> for Scene {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Vertex {
     pub position: [f32; 3],
+    _pad1: [u8; 4],
     pub normal: [f32; 3],
+    _pad2: [u8; 4],
     pub tex_coord: [f32; 2],
+    _pad3: [u8; 8],
 }
 
-#[derive(Clone, Copy, Default)]
+// This needs to derive some bytemuck traits so we can put 'em in a buffer on the GPU
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Triangle {
     pub vertices: [Vertex; 3],
-    pub material_id: usize,
+    pub material_id: u32,
+    _pad: [u8; 12],
 }
 
 impl Triangle {
-    fn new(vertices: [Vertex; 3], material_id: usize) -> Self {
+    fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
         return Self {
             vertices,
             material_id,
+            _pad: [0; 12],
         };
     }
 

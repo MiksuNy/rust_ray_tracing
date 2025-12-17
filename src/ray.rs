@@ -155,7 +155,7 @@ impl Ray {
             }
 
             if hit_info.has_hit {
-                let hit_material = &scene.materials[hit_info.material_id];
+                let hit_material = &scene.materials[hit_info.material_id as usize];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
@@ -212,7 +212,7 @@ struct HitInfo {
     normal: Vec3f,
     distance: f32,
     uv: [f32; 2],
-    material_id: usize,
+    material_id: u32,
     front_face: bool,
 }
 
