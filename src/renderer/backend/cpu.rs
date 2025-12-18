@@ -13,8 +13,8 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         rayon::current_num_threads()
     );
 
-    let width = renderer.output_image_dimensions.0;
-    let height = renderer.output_image_dimensions.1;
+    let width = renderer.options.output_image_dimensions.0;
+    let height = renderer.options.output_image_dimensions.1;
 
     let block_size = (width * height) / rayon::current_num_threads();
 
@@ -31,7 +31,7 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 (((x as f32 / width as f32) * 2.0) - 1.0) * (width as f32 / height as f32);
             let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
-            for _ in 0..renderer.samples {
+            for _ in 0..renderer.options.samples {
                 let mut ray = Ray::new(
                     // Hard coded camera position
                     Vec3f::new(0.0, 0.0, 7.0),
@@ -45,20 +45,20 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
 
                 final_color += Ray::trace(
                     &mut ray,
-                    renderer.max_ray_depth,
+                    renderer.options.max_ray_depth,
                     &scene,
                     &mut rng_state,
-                    renderer.debug_mode,
+                    renderer.options.debug_mode,
                 );
 
                 // Only one sample is needed for BVH visualization
-                if renderer.debug_mode {
+                if renderer.options.debug_mode {
                     break;
                 }
             }
 
-            if !renderer.debug_mode {
-                final_color /= renderer.samples as f32;
+            if !renderer.options.debug_mode {
+                final_color /= renderer.options.samples as f32;
             }
             final_color = Vec3f::linear_to_gamma(final_color);
 

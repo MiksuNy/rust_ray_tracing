@@ -1,11 +1,9 @@
 pub mod cpu;
-pub mod gpu;
+pub mod wgpu;
 
 #[derive(Default, Debug)]
 pub enum RendererBackend {
     #[default]
-    /// Uses the CPU to render a scene.
     CPU,
-    /// Uses WGPU as a backend
     WGPU,
 }

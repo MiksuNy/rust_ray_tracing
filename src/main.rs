@@ -1,3 +1,4 @@
+use renderer::RendererOptions;
 use renderer::backend::RendererBackend;
 
 use crate::renderer::Renderer;
@@ -22,13 +23,13 @@ const OBJ_PATH: &str = "../res/dragon/dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
-    let Some(renderer) = Renderer::new(
-        SAMPLE_COUNT,
-        MAX_BOUNCES,
-        DEBUG_BVH,
-        (WIDTH, HEIGHT),
-        RendererBackend::WGPU,
-    ) else {
+    let Some(renderer) = Renderer::new(RendererOptions {
+        samples: SAMPLE_COUNT,
+        max_ray_depth: MAX_BOUNCES,
+        debug_mode: DEBUG_BVH,
+        output_image_dimensions: (WIDTH, HEIGHT),
+        backend: RendererBackend::WGPU,
+    }) else {
         return;
     };
 

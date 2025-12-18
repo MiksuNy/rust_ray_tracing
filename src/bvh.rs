@@ -23,6 +23,7 @@ impl BVH {
 
         Self::split_node(0, &mut bvh, scene);
 
+        // TODO: Maybe this info should only be calculated if debug mode is on?
         let mut leaf_node_count: usize = 0;
         let mut avg_tri_count: f32 = 0.0;
         let mut min_tri_count: usize = usize::MAX;

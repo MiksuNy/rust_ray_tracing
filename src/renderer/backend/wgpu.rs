@@ -40,8 +40,8 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d {
-            width: renderer.output_image_dimensions.0 as u32,
-            height: renderer.output_image_dimensions.1 as u32,
+            width: renderer.options.output_image_dimensions.0 as u32,
+            height: renderer.options.output_image_dimensions.1 as u32,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -54,7 +54,9 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     let storage_texture_view = storage_texture.create_view(&wgpu::TextureViewDescriptor::default());
     let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
-        size: (renderer.output_image_dimensions.0 * 4 * renderer.output_image_dimensions.1) as u64,
+        size: (renderer.options.output_image_dimensions.0
+            * 4
+            * renderer.options.output_image_dimensions.1) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
@@ -130,8 +132,8 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         compute_pass.set_bind_group(0, &bind_group, &[]);
         compute_pass.set_pipeline(&pipeline);
         compute_pass.dispatch_workgroups(
-            (renderer.output_image_dimensions.0 / 8) as u32,
-            (renderer.output_image_dimensions.1 / 8) as u32,
+            (renderer.options.output_image_dimensions.0 / 8) as u32,
+            (renderer.options.output_image_dimensions.1 / 8) as u32,
             1,
         );
         // End compute pass
@@ -147,13 +149,13 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             buffer: &output_staging_buffer,
             layout: wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some((renderer.output_image_dimensions.0 * 4) as u32),
-                rows_per_image: Some(renderer.output_image_dimensions.1 as u32),
+                bytes_per_row: Some((renderer.options.output_image_dimensions.0 * 4) as u32),
+                rows_per_image: Some(renderer.options.output_image_dimensions.1 as u32),
             },
         },
         wgpu::Extent3d {
-            width: renderer.output_image_dimensions.0 as u32,
-            height: renderer.output_image_dimensions.1 as u32,
+            width: renderer.options.output_image_dimensions.0 as u32,
+            height: renderer.options.output_image_dimensions.1 as u32,
             depth_or_array_layers: 1,
         },
     );
