@@ -1,9 +1,11 @@
 use crate::log_info;
-use crate::ray::Ray;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
 use crate::vector::Vec3f;
+use ray::Ray;
 use rayon::prelude::*;
+
+mod ray;
 
 // TODO: A simple progress indicator for rendering would be nice
 pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {

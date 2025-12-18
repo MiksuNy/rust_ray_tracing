@@ -8,7 +8,6 @@ use crate::vector::Vec3f;
 mod bvh;
 mod loader;
 mod log;
-mod ray;
 mod renderer;
 mod scene;
 mod texture;
