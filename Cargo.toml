@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 rayon = "1.11"
 image = "0.25.9"
-wgpu = "27.0.1"
+wgpu = "28.0.0"
 pollster = "0.4.0"
 bytemuck = "=1.24.0"
 flume = "0.12.0"

@@ -40,8 +40,6 @@ impl Ray {
 
         let front_face = det > 0.0;
 
-        let hit_point = ray.origin + (ray.direction * t);
-
         // Smooth shading
         let n_0: Vec3f = tri.vertices[0].normal.into();
         let n_1: Vec3f = tri.vertices[1].normal.into();
@@ -73,7 +71,7 @@ impl Ray {
                 && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),
-            point: hit_point,
+            point: ray.origin + (ray.direction * t),
             normal: normal,
             distance: t,
             uv: uv,
@@ -82,7 +80,7 @@ impl Ray {
         };
     }
 
-    fn intersect_node(ray: &Self, node: &Node) -> bool {
+    fn intersect_node(ray: &Self, node: &Node) -> f32 {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
         // NOTE: Adding and subtracting tiny amounts from t_1 and t_2 feels very hacky and not good
@@ -90,54 +88,72 @@ impl Ray {
         let t_2 = Vec3f::max(t_min, t_max) + Vec3f::from(RAY_HIT_OFFSET);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
-        return t_near < t_far && t_far > 0.0;
+        if t_near < t_far && t_far > 0.0 {
+            return t_near;
+        } else {
+            return 1e30f32;
+        }
     }
 
-    fn traverse_bvh(ray: &Self, scene: &Scene, index: usize, hit_info: &mut HitInfo) {
-        let node = scene.bvh.nodes[index];
-        if !Self::intersect_node(ray, &node) {
-            return;
-        }
+    // https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
+    fn traverse_bvh(ray: &Self, scene: &Scene, hit_info: &mut HitInfo) {
+        let mut stack: [Node; 64] = [Node::default(); 64];
+        let mut node: &Node = scene.bvh.nodes.get(0).unwrap();
+        let mut stack_ptr: usize = 0;
 
-        if node.num_tris > 0 {
-            for i in 0..node.num_tris {
-                let temp_hit_info = Self::intersect_tri(ray, &scene.tris[node.first_tri_id + i]);
-                if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
-                    *hit_info = temp_hit_info;
+        loop {
+            if node.num_tris > 0 {
+                for i in 0..node.num_tris {
+                    let temp_hit_info = Self::intersect_tri(
+                        ray,
+                        &scene.tris[(node.first_tri_or_child + i) as usize],
+                    );
+                    if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
+                        *hit_info = temp_hit_info;
+                    }
+                }
+                if stack_ptr == 0 {
+                    break;
+                } else {
+                    stack_ptr -= 1;
+                    node = stack.get(stack_ptr).unwrap();
+                }
+                continue;
+            }
+            let mut child_1 = scene
+                .bvh
+                .nodes
+                .get(node.first_tri_or_child as usize)
+                .unwrap();
+            let mut child_2 = scene
+                .bvh
+                .nodes
+                .get((node.first_tri_or_child + 1) as usize)
+                .unwrap();
+            let mut dist_1 = Self::intersect_node(ray, &child_1);
+            let mut dist_2 = Self::intersect_node(ray, &child_2);
+            if dist_1 > dist_2 {
+                std::mem::swap(&mut dist_1, &mut dist_2);
+                std::mem::swap(&mut child_1, &mut child_2);
+            }
+            if dist_1 == 1e30f32 {
+                if stack_ptr == 0 {
+                    break;
+                } else {
+                    stack_ptr -= 1;
+                    node = stack.get(stack_ptr).unwrap();
+                }
+            } else {
+                node = &child_1;
+                if dist_2 < 1e30f32 {
+                    stack[stack_ptr as usize] = *child_2;
+                    stack_ptr += 1;
                 }
             }
-        } else {
-            Self::traverse_bvh(ray, scene, node.children_id, hit_info);
-            Self::traverse_bvh(ray, scene, node.children_id + 1, hit_info);
         }
     }
 
-    fn debug_bvh(ray: &Self, scene: &Scene, index: usize, debug_color: &mut Vec3f) {
-        let node = scene.bvh.nodes[index];
-        if !Self::intersect_node(ray, &node) {
-            return;
-        }
-
-        if node.num_tris > 0 {
-            if node.num_tris > 4 {
-                *debug_color += Vec3f::new(0.05, 0.0, 0.0);
-            } else {
-                *debug_color += Vec3f::new(0.0, 0.05, 0.0);
-            }
-        } else {
-            *debug_color += Vec3f::new(0.0, 0.0, 0.005);
-            Self::debug_bvh(ray, scene, node.children_id, debug_color);
-            Self::debug_bvh(ray, scene, node.children_id + 1, debug_color);
-        }
-    }
-
-    pub fn trace(
-        ray: &mut Self,
-        max_bounces: usize,
-        scene: &Scene,
-        rng_state: &mut u32,
-        debug_bvh: bool,
-    ) -> Vec3f {
+    pub fn trace(ray: &mut Self, max_bounces: usize, scene: &Scene, rng_state: &mut u32) -> Vec3f {
         let mut ray_color = Vec3f::new(1.0, 1.0, 1.0);
         let mut incoming_light = Vec3f::new(0.0, 0.0, 0.0);
         let mut emitted_light = Vec3f::new(0.0, 0.0, 0.0);
@@ -146,13 +162,7 @@ impl Ray {
         while curr_bounces < max_bounces {
             let mut hit_info = HitInfo::default();
 
-            // Early return here because BVH visualization doesn't need more than one bounce
-            if debug_bvh {
-                Self::debug_bvh(ray, scene, 0, &mut incoming_light);
-                return incoming_light;
-            } else {
-                Self::traverse_bvh(ray, scene, 0, &mut hit_info);
-            }
+            Self::traverse_bvh(ray, scene, &mut hit_info);
 
             if hit_info.has_hit {
                 let hit_material = &scene.materials[hit_info.material_id as usize];
@@ -187,7 +197,7 @@ impl Ray {
                 curr_bounces += 1;
             } else {
                 let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                let sky_strength = Vec3f::from(0.0);
+                let sky_strength = Vec3f::from(1.0);
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;

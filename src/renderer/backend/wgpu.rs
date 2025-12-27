@@ -3,6 +3,7 @@ use std::num::NonZeroU64;
 use wgpu::util::DeviceExt;
 
 use crate::{
+    bvh::Node,
     log_info,
     renderer::Renderer,
     scene::{Scene, Triangle},
@@ -11,11 +12,16 @@ use crate::{
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     log_info!("Rendering scene with WGPU backend");
 
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN,
+        flags: wgpu::InstanceFlags::default(),
+        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        backend_options: wgpu::BackendOptions::default(),
+    });
     let adapter =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
             .expect("Failed to create adapter");
-    log_info!("Adapter info: {:#?}", adapter.get_info());
+    log_info!("{:#?}", adapter.get_info());
 
     let downlevel_capabilities = adapter.get_downlevel_capabilities();
     if !downlevel_capabilities
@@ -28,7 +34,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
         required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
-        required_limits: wgpu::Limits::downlevel_defaults(),
+        required_limits: wgpu::Limits::defaults(),
         experimental_features: wgpu::ExperimentalFeatures::disabled(),
         memory_hints: wgpu::MemoryHints::Performance,
         trace: wgpu::Trace::Off,
@@ -62,10 +68,25 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     });
 
     let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: None,
+        label: Some("Scene triangles"),
         contents: bytemuck::cast_slice(scene.tris.as_slice()),
         usage: wgpu::BufferUsages::STORAGE,
     });
+    log_info!(
+        "Created a buffer for scene triangles with size: {} bytes ({} tris)",
+        triangle_buffer.size(),
+        triangle_buffer.size() / size_of::<Triangle>() as u64
+    );
+    let bvh_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("BVH nodes"),
+        contents: bytemuck::cast_slice(scene.bvh.nodes.as_slice()),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    log_info!(
+        "Created a buffer for BVH nodes with size: {} bytes ({} nodes)",
+        bvh_buffer.size(),
+        bvh_buffer.size() / size_of::<Node>() as u64
+    );
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
@@ -90,6 +111,16 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<Node>() as u64)).unwrap(),
+                },
+                count: None,
+            },
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -104,13 +135,17 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 binding: 1,
                 resource: triangle_buffer.as_entire_binding(),
             },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: bvh_buffer.as_entire_binding(),
+            },
         ],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
+        immediate_size: 0,
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: None,

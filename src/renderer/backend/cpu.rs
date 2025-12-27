@@ -50,18 +50,10 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                     renderer.options.max_ray_depth,
                     &scene,
                     &mut rng_state,
-                    renderer.options.debug_mode,
                 );
-
-                // Only one sample is needed for BVH visualization
-                if renderer.options.debug_mode {
-                    break;
-                }
             }
 
-            if !renderer.options.debug_mode {
-                final_color /= renderer.options.samples as f32;
-            }
+            final_color /= renderer.options.samples as f32;
             final_color = Vec3f::linear_to_gamma(final_color);
 
             let rgb: [u8; 3] = final_color.into();

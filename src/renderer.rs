@@ -64,7 +64,6 @@ impl Renderer {
         );
         log_info!("- Sample count:            {}", self.options.samples);
         log_info!("- Max bounces:             {}", self.options.max_ray_depth);
-        log_info!("- Debug mode:              {}", self.options.debug_mode);
         log_info!("- Backend:                 {:?}\n", self.options.backend);
     }
 }
@@ -81,7 +80,6 @@ impl Default for Renderer {
 pub struct RendererOptions {
     pub samples: usize,
     pub max_ray_depth: usize,
-    pub debug_mode: bool,
     pub output_image_dimensions: (usize, usize),
     pub backend: RendererBackend,
 }
@@ -91,7 +89,6 @@ impl Default for RendererOptions {
         return Self {
             samples: 1,
             max_ray_depth: 6,
-            debug_mode: false,
             output_image_dimensions: (1920, 1080),
             backend: RendererBackend::default(),
         };

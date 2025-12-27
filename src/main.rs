@@ -1,7 +1,5 @@
-use renderer::RendererOptions;
-use renderer::backend::RendererBackend;
-
-use crate::renderer::Renderer;
+use crate::renderer::backend::RendererBackend;
+use crate::renderer::*;
 use crate::scene::Scene;
 use crate::vector::Vec3f;
 
@@ -16,16 +14,14 @@ mod vector;
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 6;
-const DEBUG_BVH: bool = false;
-const OBJ_PATH: &str = "../res/dragon/dragon.obj";
+const MAX_BOUNCES: usize = 2;
+const OBJ_PATH: &str = "../res/erato.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
     let Some(renderer) = Renderer::new(RendererOptions {
         samples: SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
-        debug_mode: DEBUG_BVH,
         output_image_dimensions: (WIDTH, HEIGHT),
         backend: RendererBackend::WGPU,
     }) else {
