@@ -54,9 +54,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     ray.direction = normalize(vec3<f32>(screen_x, screen_y, -2.0f));
 
     let hit_info = traverse_bvh(ray);
-    let color = vec3<f32>(clamp(dot(normalize(vec3<f32>(1.0f, 1.0f, 1.0f)), hit_info.normal), 0.0, 1.0));
 
-    textureStore(texture, vec2(i32(global_id.x), i32(global_id.y)), vec4(color, 1.0));
+    textureStore(texture, vec2(i32(global_id.x), i32(global_id.y)), vec4<f32>(hit_info.normal, 1.0));
 }
 
 fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
@@ -89,9 +88,9 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     hit_info.front_face = front_face;
 
     let n_0 = tri.vertices[0].normal;
-    let n_1 = tri.vertices[0].normal;
-    let n_2 = tri.vertices[0].normal;
-    var normal = n_0 * (1.0 - u - v) + (n_1 * u) + (n_2 * v);
+    let n_1 = tri.vertices[1].normal;
+    let n_2 = tri.vertices[2].normal;
+    var normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
     if !front_face {
         normal = normal * -1.0f;
     }
@@ -100,7 +99,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     let t_0 = tri.vertices[0].tex_coord;
     let t_1 = tri.vertices[1].tex_coord;
     let t_2 = tri.vertices[2].tex_coord;
-    hit_info.uv = t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v);
+    hit_info.uv = t_0 * (1.0f - u - v) + (t_1 * u) + (t_2 * v);
 
     hit_info.material_id = tri.material_id;
 
