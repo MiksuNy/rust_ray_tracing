@@ -109,8 +109,8 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
 fn intersect_node(ray: Ray, node: Node) -> f32 {
     let t_min = (node.bounds_min - ray.origin) / ray.direction;
     let t_max = (node.bounds_max - ray.origin) / ray.direction;
-    let t_1 = min(t_min, t_max) - vec3<f32>(0.0001f, 0.0001f, 0.0001f);
-    let t_2 = max(t_min, t_max) + vec3<f32>(0.0001f, 0.0001f, 0.0001f);
+    let t_1 = min(t_min, t_max);
+    let t_2 = max(t_min, t_max);
     let t_near = max(max(t_1.x, t_1.y), t_1.z);
     let t_far = min(min(t_2.x, t_2.y), t_2.z);
 

@@ -15,7 +15,7 @@ const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 2;
-const OBJ_PATH: &str = "../res/erato.obj";
+const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
