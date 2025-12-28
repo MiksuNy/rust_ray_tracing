@@ -24,14 +24,10 @@ impl Renderer {
     }
 
     pub fn render_scene_to_path(&self, scene: &Scene, path: &str) {
-        let start_time = std::time::Instant::now();
-
         let bytes = match self.options.backend {
             RendererBackend::CPU => backend::cpu::render_scene(self, scene),
             RendererBackend::WGPU => pollster::block_on(backend::wgpu::render_scene(self, scene)),
         };
-
-        log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
         let width = self.options.output_image_dimensions.0;
         let height = self.options.output_image_dimensions.1;

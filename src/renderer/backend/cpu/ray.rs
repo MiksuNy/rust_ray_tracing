@@ -1,7 +1,7 @@
-use crate::Vec3f;
 use crate::bvh::Node;
 use crate::scene::{Scene, Triangle};
 use crate::vector::Vec3Swizzles;
+use crate::{Vec3f, log_info};
 
 // NOTE: This is used when moving the ray towards a new direction on bounce AND for increasing node
 // bounds by a tiny amount when checking intersections with rays to prevent visual holes in models

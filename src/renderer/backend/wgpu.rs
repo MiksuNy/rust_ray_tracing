@@ -194,7 +194,9 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             depth_or_array_layers: 1,
         },
     );
+    let start_time = std::time::Instant::now();
     queue.submit(Some(command_encoder.finish()));
+    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = output_staging_buffer.slice(..);
