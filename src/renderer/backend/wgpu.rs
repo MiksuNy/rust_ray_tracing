@@ -20,6 +20,10 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
             .expect("Failed to create adapter");
     log_info!("{:#?}", adapter.get_info());
+    log_info!(
+        "Max storage buffer binding size: {} MB",
+        adapter.limits().max_storage_buffer_binding_size as f32 / 1024.0 / 1024.0
+    );
 
     let downlevel_capabilities = adapter.get_downlevel_capabilities();
     if !downlevel_capabilities
@@ -71,8 +75,8 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         usage: wgpu::BufferUsages::STORAGE,
     });
     log_info!(
-        "Created a buffer for scene triangles with size: {} bytes ({} tris)",
-        triangle_buffer.size(),
+        "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
+        triangle_buffer.size() as f32 / 1024.0 / 1024.0,
         triangle_buffer.size() / size_of::<Triangle>() as u64
     );
     let bvh_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -81,8 +85,8 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         usage: wgpu::BufferUsages::STORAGE,
     });
     log_info!(
-        "Created a buffer for BVH nodes with size: {} bytes ({} nodes)",
-        bvh_buffer.size(),
+        "Created a storage buffer for BVH nodes: {:.2} MB ({} nodes)",
+        bvh_buffer.size() as f32 / 1024.0 / 1024.0,
         bvh_buffer.size() / size_of::<Node>() as u64
     );
 
