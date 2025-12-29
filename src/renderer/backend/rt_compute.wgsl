@@ -55,9 +55,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     var final_color = vec3<f32>(0.0f);
     for (var sample = 0u; sample < max_samples; sample++) {
+        let jitter = vec2<f32>(
+            rand_f32(&rng_seed) * 2.0f - 1.0f,
+            rand_f32(&rng_seed) * 2.0f - 1.0f
+        ) * 0.0005f;
+        let ray_dir = vec2<f32>(screen_x, screen_y) + jitter;
+
         var ray = Ray();
-        ray.origin = vec3<f32>(0.0f, 0.0f, 3.0f);
-        ray.direction = normalize(vec3<f32>(screen_x, screen_y, -2.0f));
+        ray.origin = vec3<f32>(0.0f, 0.0f, 5.0f);
+        ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
 
         final_color += trace(&ray, &rng_seed, 6u);
     }
@@ -80,7 +86,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
             ray_color *= vec3<f32>(0.9f);
             incoming_light += emitted_light * ray_color;
 
-            let new_dir = rand_in_unit_hemisphere(rng_seed, hit_info.normal);
+            let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));
             (*ray).origin = hit_info.point + new_dir * 0.0001f;
             (*ray).direction = new_dir;
 
