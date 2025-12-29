@@ -43,19 +43,65 @@ struct HitInfo {
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    var rng_seed = 22235u + (757283u * global_id.x + 872653746u * global_id.y);
+
     let texture_w = f32(textureDimensions(texture).x);
     let texture_h = f32(textureDimensions(texture).y);
     let aspect = texture_w / texture_h;
     let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
     let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
 
-    var ray = Ray();
-    ray.origin = vec3<f32>(0.0f, 0.0f, 5.0f);
-    ray.direction = normalize(vec3<f32>(screen_x, screen_y, -2.0f));
+    let max_samples = 10u;
 
-    let hit_info = traverse_bvh(ray);
+    var final_color = vec3<f32>(0.0f);
+    for (var sample = 0u; sample < max_samples; sample++) {
+        var ray = Ray();
+        ray.origin = vec3<f32>(0.0f, 0.0f, 3.0f);
+        ray.direction = normalize(vec3<f32>(screen_x, screen_y, -2.0f));
 
-    textureStore(texture, vec2(i32(global_id.x), i32(global_id.y)), vec4<f32>(hit_info.normal, 1.0));
+        final_color += trace(&ray, &rng_seed, 6u);
+    }
+    final_color /= f32(max_samples);
+    final_color = linear_to_srgb(final_color);
+
+    textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
+}
+
+fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) -> vec3<f32> {
+    var ray_color = vec3<f32>(1.0f);
+    var incoming_light = vec3<f32>(0.0f);
+    var emitted_light = vec3<f32>(0.0f);
+
+    var curr_depth: u32 = 0u;
+    while curr_depth < max_depth {
+        let hit_info = traverse_bvh(*ray);
+
+        if hit_info.has_hit {
+            ray_color *= vec3<f32>(0.9f);
+            incoming_light += emitted_light * ray_color;
+
+            let new_dir = rand_in_unit_hemisphere(rng_seed, hit_info.normal);
+            (*ray).origin = hit_info.point + new_dir * 0.0001f;
+            (*ray).direction = new_dir;
+
+            curr_depth += 1u;
+        } else {
+            let sky_color = vec3<f32>(0.99f, 0.97f, 0.98f);
+            let sky_strength = vec3<f32>(1.0f);
+
+            ray_color *= sky_color;
+            emitted_light += sky_strength;
+            incoming_light += emitted_light * ray_color;
+
+            break;
+        }
+    }
+
+    if curr_depth == 0u {
+        return incoming_light;
+    } else {
+        return incoming_light / f32(curr_depth);
+    }
 }
 
 fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
@@ -91,10 +137,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     let n_1 = tri.vertices[1].normal;
     let n_2 = tri.vertices[2].normal;
     var normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
-    if !front_face {
-        normal = normal * -1.0f;
-    }
-    hit_info.normal = normal;
+    hit_info.normal = select(-normal, normal, front_face);
 
     let t_0 = tri.vertices[0].tex_coord;
     let t_1 = tri.vertices[1].tex_coord;
@@ -171,4 +214,49 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
     }
 
     return hit_info;
+}
+
+fn xor_shift(input: ptr<function, u32>) -> u32 {
+    var x = *input;
+    x = x ^ (x << 13);
+    x = x ^ (x >> 17);
+    x = x ^ (x << 5);
+    *input = x;
+    return x;
+}
+
+fn rand_f32(input: ptr<function, u32>) -> f32 {
+    return f32(xor_shift(input)) / f32(4294967295u);
+}
+
+fn rand_f32_nd(input: ptr<function, u32>) -> f32 {
+    let theta = 6.283185f * rand_f32(input);
+    let rho = sqrt(-2.0f * log(rand_f32(input)));
+    return rho * cos(theta);
+}
+
+fn rand_in_unit_sphere(input: ptr<function, u32>) -> vec3<f32> {
+    return normalize(vec3<f32>(
+        rand_f32_nd(input),
+        rand_f32_nd(input),
+        rand_f32_nd(input)
+    ));
+}
+
+fn rand_in_unit_hemisphere(input: ptr<function, u32>, normal: vec3<f32>) -> vec3<f32> {
+    let unit_sphere = rand_in_unit_sphere(input);
+    return faceForward(-unit_sphere, unit_sphere, normal);
+}
+
+// https://gamedev.stackexchange.com/a/194038
+fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
+    let cutoff = vec3<f32>(f32(linear.r < 0.0031308f), f32(linear.g < 0.0031308f), f32(linear.b < 0.0031308f));
+    let higher = vec3<f32>(1.055) * pow(linear, vec3<f32>(1.0/2.4)) - vec3<f32>(0.055);
+    let lower = linear * vec3<f32>(12.92);
+    return mix(higher, lower, cutoff);
+}
+
+fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
+    let f_0 = pow(ior - 1.0, 2) / pow(ior + 1.0, 2);
+    return f_0 + (1.0 - f_0) * pow(1.0 - n_dot_v, 5);
 }

@@ -9,8 +9,6 @@ mod ray;
 
 // TODO: A simple progress indicator for rendering would be nice
 pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
-    let start_time = std::time::Instant::now();
-
     log_info!("Rendering scene with CPU backend");
     log_info!(
         "Using {} threads for rendering",
@@ -22,7 +20,7 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
 
     let block_size = (width * height) / rayon::current_num_threads();
 
-    let bytes = (0..width * height)
+    (0..width * height)
         .into_par_iter()
         .by_uniform_blocks(block_size)
         .map(|index: usize| {
@@ -38,7 +36,7 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             for _ in 0..renderer.options.samples {
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3f::new(0.0, 0.0, 7.0),
+                    Vec3f::new(0.0, 0.0, 5.0),
                     Vec3f::new(
                         screen_x + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
                         screen_y + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
@@ -62,9 +60,5 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             return [rgb[0], rgb[1], rgb[2], 255];
         })
         .collect::<Vec<[u8; 4]>>()
-        .into_flattened();
-
-    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
-
-    return bytes;
+        .into_flattened()
 }

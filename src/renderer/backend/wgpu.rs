@@ -34,7 +34,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
         required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
-        required_limits: wgpu::Limits::defaults(),
+        required_limits: adapter.limits(),
         experimental_features: wgpu::ExperimentalFeatures::disabled(),
         memory_hints: wgpu::MemoryHints::Performance,
         trace: wgpu::Trace::Off,
@@ -194,9 +194,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             depth_or_array_layers: 1,
         },
     );
-    let start_time = std::time::Instant::now();
     queue.submit(Some(command_encoder.finish()));
-    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = output_staging_buffer.slice(..);
