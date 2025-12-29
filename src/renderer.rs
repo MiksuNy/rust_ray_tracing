@@ -9,16 +9,30 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(options: RendererOptions) -> Option<Self> {
-        if options.output_image_dimensions.0 <= 0 || options.output_image_dimensions.1 <= 0 {
-            log_error!(
-                "Tried to create a renderer with invalid image dimensions: {}x{}",
-                options.output_image_dimensions.0,
-                options.output_image_dimensions.1
-            );
+        if options.output_image_dimensions.0 == 0 || options.output_image_dimensions.1 == 0 {
+            log_error!("Width and height must be greater than 0");
             return None;
         }
+        if options.max_ray_depth == 0 {
+            log_error!("Max ray depth must be greater than 0");
+            return None;
+        }
+        if options.samples == 0 {
+            log_error!("Sample count must be greater than 0");
+            return None;
+        }
+
+        log_info!("Renderer info");
+        log_info!(
+            "- Output image dimensions: {}x{}",
+            options.output_image_dimensions.0,
+            options.output_image_dimensions.1
+        );
+        log_info!("- Sample count:            {}", options.samples);
+        log_info!("- Max bounces:             {}", options.max_ray_depth);
+        log_info!("- Backend:                 {:?}\n", options.backend);
+
         let renderer = Self { options };
-        renderer.log_info();
 
         return Some(renderer);
     }
@@ -31,6 +45,7 @@ impl Renderer {
             RendererBackend::CPU => backend::cpu::render_scene(self, scene),
             RendererBackend::WGPU => pollster::block_on(backend::wgpu::render_scene(self, scene)),
         };
+        // FIXME: This is not accurate at all, especially with the wgpu backend
         log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
         let width = self.options.output_image_dimensions.0;
@@ -53,18 +68,6 @@ impl Renderer {
         } else {
             log_info!("Succesfully wrote image data to '{}'", path);
         }
-    }
-
-    fn log_info(&self) {
-        log_info!("Renderer info");
-        log_info!(
-            "- Output image dimensions: {}x{}",
-            self.options.output_image_dimensions.0,
-            self.options.output_image_dimensions.1
-        );
-        log_info!("- Sample count:            {}", self.options.samples);
-        log_info!("- Max bounces:             {}", self.options.max_ray_depth);
-        log_info!("- Backend:                 {:?}\n", self.options.backend);
     }
 }
 
