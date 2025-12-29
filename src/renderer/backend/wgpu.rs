@@ -10,8 +10,6 @@ use crate::{
 };
 
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
-    log_info!("Rendering scene with WGPU backend");
-
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         flags: wgpu::InstanceFlags::default(),

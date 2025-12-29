@@ -24,6 +24,8 @@ impl Renderer {
     }
 
     pub fn render_scene_to_path(&self, scene: &Scene, path: &str) {
+        log_info!("Rendering scene with {:?} backend", self.options.backend);
+
         let start_time = std::time::Instant::now();
         let bytes = match self.options.backend {
             RendererBackend::CPU => backend::cpu::render_scene(self, scene),
