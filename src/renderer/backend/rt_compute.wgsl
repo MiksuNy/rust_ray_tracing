@@ -51,10 +51,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
     let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
 
-    let max_samples = 10u;
+    let samples = 10u;
 
     var final_color = vec3<f32>(0.0f);
-    for (var sample = 0u; sample < max_samples; sample++) {
+    for (var sample = 0u; sample < samples; sample++) {
         let jitter = vec2<f32>(
             rand_f32(&rng_seed) * 2.0f - 1.0f,
             rand_f32(&rng_seed) * 2.0f - 1.0f
@@ -67,7 +67,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         final_color += trace(&ray, &rng_seed, 6u);
     }
-    final_color /= f32(max_samples);
+    final_color /= f32(samples);
     final_color = linear_to_srgb(final_color);
 
     textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
