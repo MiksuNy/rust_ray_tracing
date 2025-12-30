@@ -63,7 +63,7 @@ impl Ray {
         let uv = (t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v)).xy();
 
         return HitInfo {
-            has_hit: t > 0.0001
+            has_hit: t > 0.0
                 && !(det < 0.0 && det > -0.0)
                 && !(u < 0.0 || u > 1.0)
                 && !(v < 0.0 || u + v > 1.0),

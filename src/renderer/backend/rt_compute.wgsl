@@ -62,7 +62,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let ray_dir = vec2<f32>(screen_x, screen_y) + jitter;
 
         var ray = Ray();
-        ray.origin = vec3<f32>(0.0f, 0.0f, 5.0f);
+        ray.origin = vec3<f32>(0.0f, 0.0f, 2.0f);
         ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
 
         final_color += trace(&ray, &rng_seed, 6u);
@@ -132,7 +132,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
 
     var hit_info = HitInfo();
 
-    hit_info.has_hit = t > 0.0001f && !(det < 0.0f && det > -0.0f) && !(u < 0.0f || u > 1.0f) && !(v < 0.0f || u + v > 1.0f);
+    hit_info.has_hit = t > 0.0f && !(det < 0.0f && det > -0.0f) && !(u < 0.0f || u > 1.0f) && !(v < 0.0f || u + v > 1.0f);
     hit_info.point = ray.origin + (ray.direction * t);
     hit_info.distance = t;
 
