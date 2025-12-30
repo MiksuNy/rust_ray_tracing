@@ -163,7 +163,7 @@ fn intersect_node(ray: Ray, node: Node) -> f32 {
     let t_near = max(max(t_1.x, t_1.y), t_1.z);
     let t_far = min(min(t_2.x, t_2.y), t_2.z);
 
-    return select(1e30f, t_near, t_near < t_far && t_far > 0.0f);
+    return select(1e30f, t_near, t_near <= t_far && t_far > 0.0f);
 }
 
 fn traverse_bvh(ray: Ray) -> HitInfo {

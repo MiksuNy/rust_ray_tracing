@@ -75,10 +75,6 @@ impl BVH {
             }
         }
 
-        // Make sure nodes aren't infinitely thin on any axis
-        node.bounds_min -= Vec3f::from(0.0001);
-        node.bounds_max += Vec3f::from(0.0001);
-
         if best_split_cost >= parent_cost {
             return;
         }

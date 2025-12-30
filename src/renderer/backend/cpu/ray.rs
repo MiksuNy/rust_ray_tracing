@@ -83,7 +83,7 @@ impl Ray {
         let t_2 = Vec3f::max(t_min, t_max);
         let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
         let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
-        if t_near < t_far && t_far > 0.0 {
+        if t_near <= t_far && t_far > 0.0 {
             return t_near;
         } else {
             return 1e30f32;
