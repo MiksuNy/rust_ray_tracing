@@ -51,26 +51,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
     let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
 
-    let samples = 10u;
+    let ray_dir = vec2<f32>(screen_x, screen_y);
+    var ray = Ray();
+    ray.origin = vec3<f32>(0.0f, 0.0f, 0.0f);
+    ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
+    //let final_color = linear_to_srgb(trace(&ray, &rng_seed, 1u));
 
-    var final_color = vec3<f32>(0.0f);
-    for (var sample = 0u; sample < samples; sample++) {
-        let jitter = vec2<f32>(
-            rand_f32(&rng_seed) * 2.0f - 1.0f,
-            rand_f32(&rng_seed) * 2.0f - 1.0f
-        ) * 0.0005f;
-        let ray_dir = vec2<f32>(screen_x, screen_y) + jitter;
+    let debug_color = debug_bvh(ray, 1000.0f);
 
-        var ray = Ray();
-        ray.origin = vec3<f32>(0.0f, 0.0f, 2.0f);
-        ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
-
-        final_color += trace(&ray, &rng_seed, 6u);
-    }
-    final_color /= f32(samples);
-    final_color = linear_to_srgb(final_color);
-
-    textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
+    textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(debug_color, 1.0));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) -> vec3<f32> {
@@ -220,6 +209,80 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
     }
 
     return hit_info;
+}
+
+fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
+    var stack = array<Node, 32u>();
+    var node = bvh_nodes[0u];
+    var stack_ptr: u32 = 0u;
+
+    var debug_value = 0.0f;
+    loop {
+        debug_value += 1.0f;
+        if node.num_tris > 0u {
+            for (var i = 0u; i < node.num_tris; i++) {
+                debug_value += 1.1f;
+            }
+            if stack_ptr == 0u {
+                break;
+            } else {
+                stack_ptr--;
+                node = stack[stack_ptr];
+            }
+            continue;
+        }
+        var child_1 = bvh_nodes[node.first_tri_or_child];
+        var child_2 = bvh_nodes[node.first_tri_or_child + 1u];
+        var dist_1 = intersect_node(ray, child_1);
+        var dist_2 = intersect_node(ray, child_2);
+        if dist_1 > dist_2 {
+            let temp_dist = dist_1;
+            dist_1 = dist_2;
+            dist_2 = temp_dist;
+
+            let temp_child = child_1;
+            child_1 = child_2;
+            child_2 = temp_child;
+        }
+        if dist_1 == 1e30f {
+            if stack_ptr == 0u {
+                break;
+            } else {
+                stack_ptr--;
+                node = stack[stack_ptr];
+            }
+        } else {
+            node = child_1;
+            if dist_2 < 1e30f {
+                stack[stack_ptr] = child_2;
+                stack_ptr++;
+            }
+        }
+    }
+
+    debug_value /= factor;
+
+    return turbo_colormap(&debug_value);
+}
+
+// https://research.google/blog/turbo-an-improved-rainbow-colormap-for-visualization/
+fn turbo_colormap(x_ptr: ptr<function, f32>) -> vec3<f32> {
+    let kRedVec4 = vec4<f32>(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+    let kGreenVec4 = vec4<f32>(0.09140261, 2.19418839, 4.84296658, -14.18503333);
+    let kBlueVec4 = vec4<f32>(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+    let kRedVec2 = vec2<f32>(-152.94239396, 59.28637943);
+    let kGreenVec2 = vec2<f32>(4.27729857, 2.82956604);
+    let kBlueVec2 = vec2<f32>(-89.90310912, 27.34824973);
+
+    var x = *x_ptr;
+    x = clamp(x, 0.0f, 1.0f);
+    let v4 = vec4<f32>( 1.0, x, x * x, x * x * x);
+    let v2 = v4.zw * v4.z;
+    return vec3<f32>(
+        dot(v4, kRedVec4)   + dot(v2, kRedVec2),
+        dot(v4, kGreenVec4) + dot(v2, kGreenVec2),
+        dot(v4, kBlueVec4)  + dot(v2, kBlueVec2)
+    );
 }
 
 fn xor_shift(input: ptr<function, u32>) -> u32 {
