@@ -53,11 +53,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let ray_dir = vec2<f32>(screen_x, screen_y);
     var ray = Ray();
-    ray.origin = vec3<f32>(0.0f, 0.0f, 0.0f);
+    ray.origin = vec3<f32>(0.0f, 0.0f, 7.0f);
     ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
-    //let final_color = linear_to_srgb(trace(&ray, &rng_seed, 1u));
+    //let final_color = linear_to_srgb(trace(&ray, &rng_seed, 6u));
 
-    let debug_color = debug_bvh(ray, 1000.0f);
+    let debug_color = debug_bvh(ray, 300.0f);
 
     textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(debug_color, 1.0));
 }

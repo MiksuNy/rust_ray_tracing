@@ -63,9 +63,20 @@ impl BVH {
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
         for split_axis in 0..3 {
-            let scale = node.extent().data[split_axis] / NUM_BINS as f32;
+            let mut centroid_bounds_min = f32::MAX;
+            let mut centroid_bounds_max = f32::MIN;
+            for i in 0..node.num_tris {
+                let tri = scene.tris[(node.first_tri_or_child + i) as usize];
+                centroid_bounds_min = f32::min(centroid_bounds_min, tri.mid().data[split_axis]);
+                centroid_bounds_max = f32::max(centroid_bounds_max, tri.mid().data[split_axis]);
+            }
+            if centroid_bounds_min == centroid_bounds_max {
+                continue;
+            }
+
+            let scale = (centroid_bounds_max - centroid_bounds_min) / NUM_BINS as f32;
             for i in 0..NUM_BINS {
-                let split_pos = node.bounds_min.data[split_axis] + i as f32 * scale;
+                let split_pos = centroid_bounds_min + i as f32 * scale;
                 let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
                 if split_cost < best_split_cost {
                     best_split_axis = split_axis;

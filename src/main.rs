@@ -13,9 +13,9 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 100;
+const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/checkered_emission_test.obj";
+const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
