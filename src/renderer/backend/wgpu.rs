@@ -35,7 +35,10 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
 
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+        required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+            | wgpu::Features::TIMESTAMP_QUERY
+            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
+            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES,
         required_limits: adapter.limits(),
         experimental_features: wgpu::ExperimentalFeatures::disabled(),
         memory_hints: wgpu::MemoryHints::Performance,
@@ -158,6 +161,22 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         cache: None,
     });
 
+    let timestamp_capacity: u32 = 2;
+    let timestamp_query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
+        label: None,
+        ty: wgpu::QueryType::Timestamp,
+        count: timestamp_capacity,
+    });
+    let timestamp_query_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (timestamp_capacity * 8) as u64,
+        usage: wgpu::BufferUsages::QUERY_RESOLVE
+            | wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_SRC
+            | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
     let mut command_encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     {
@@ -168,13 +187,16 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         });
         compute_pass.set_bind_group(0, &bind_group, &[]);
         compute_pass.set_pipeline(&pipeline);
+        compute_pass.write_timestamp(&timestamp_query_set, 0);
         compute_pass.dispatch_workgroups(
             (renderer.options.output_image_dimensions.0 / 8) as u32,
             (renderer.options.output_image_dimensions.1 / 8) as u32,
             1,
         );
+        compute_pass.write_timestamp(&timestamp_query_set, 1);
         // End compute pass
     }
+
     command_encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &storage_texture,
@@ -196,7 +218,42 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             depth_or_array_layers: 1,
         },
     );
+
+    command_encoder.resolve_query_set(
+        &timestamp_query_set,
+        0..timestamp_capacity,
+        &timestamp_query_buffer,
+        0,
+    );
+
     queue.submit(Some(command_encoder.finish()));
+
+    let timestamp_read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: timestamp_query_buffer.size(),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut copy_encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    copy_encoder.copy_buffer_to_buffer(
+        &timestamp_query_buffer,
+        0,
+        &timestamp_read_buffer,
+        0,
+        timestamp_query_buffer.size(),
+    );
+    queue.submit(Some(copy_encoder.finish()));
+    timestamp_read_buffer.map_async(wgpu::MapMode::Read, .., |_| {});
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    let timestamps_range = timestamp_read_buffer.get_mapped_range(..);
+    let timestamps = bytemuck::cast_slice::<u8, u64>(timestamps_range.get(..).unwrap());
+    let timestamp_difference_ms = (timestamps[1] - timestamps[0]) as f32 / 1000.0 / 1000.0;
+    log_info!(
+        "Compute shader dispatch took {:.2} ms ({:.2} fps)",
+        timestamp_difference_ms,
+        1000.0 / timestamp_difference_ms
+    );
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = output_staging_buffer.slice(..);
