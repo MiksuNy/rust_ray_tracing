@@ -7,6 +7,7 @@ use crate::{
     log_info,
     renderer::Renderer,
     scene::{Scene, Triangle},
+    vector::{Mat4f, Vec3f},
 };
 
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
@@ -92,6 +93,16 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         bvh_buffer.size() as f32 / 1024.0 / 1024.0,
         bvh_buffer.size() / size_of::<Node>() as u64
     );
+    let camera_view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Camera view"),
+        contents: bytemuck::cast_slice(&scene.camera.inverse_view.data),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let camera_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Camera position"),
+        contents: bytemuck::cast_slice(&scene.camera.position.data),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
@@ -126,6 +137,26 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<Mat4f>() as u64)).unwrap(),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<Vec3f>() as u64)).unwrap(),
+                },
+                count: None,
+            },
         ],
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -143,6 +174,14 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             wgpu::BindGroupEntry {
                 binding: 2,
                 resource: bvh_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: camera_view_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: camera_position_buffer.as_entire_binding(),
             },
         ],
     });

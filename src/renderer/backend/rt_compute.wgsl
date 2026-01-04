@@ -7,6 +7,12 @@ var <storage, read> triangles : array<Triangle>;
 @group(0) @binding(2)
 var <storage, read> bvh_nodes : array<Node>;
 
+@group(0) @binding(3)
+var <uniform> camera_inverse_view : mat4x4<f32>;
+
+@group(0) @binding(4)
+var <uniform> camera_position : vec3<f32>;
+
 struct Node {
     bounds_min: vec3<f32>,
     first_tri_or_child: u32,
@@ -51,11 +57,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
     let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
 
-    let ray_dir = vec2<f32>(screen_x, screen_y);
-    var ray = Ray();
-    ray.origin = vec3<f32>(0.0f, 0.0f, 7.0f);
-    ray.direction = normalize(vec3<f32>(ray_dir, -2.0f));
-    let final_color = linear_to_srgb(trace(&ray, &rng_seed, 6u));
+    // TODO: This breaks silently at high sample counts.
+    // The loop should probably be done on the CPU and on the GPU we just read from a texture containing the previous sample's pixel data.
+    let samples = 10u;
+    var final_color = vec3<f32>(0.0);
+    for (var i = 0u; i < samples; i++) {
+        var ray = Ray();
+        ray.origin = camera_position;
+        ray.direction = normalize(camera_inverse_view * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
+
+        final_color += trace(&ray, &rng_seed, 6u);
+    }
+    final_color /= f32(samples);
+    final_color = linear_to_srgb(final_color);
 
     //let debug_color = debug_bvh(ray, 300.0f);
 
@@ -72,7 +86,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
         let hit_info = traverse_bvh(*ray);
 
         if hit_info.has_hit {
-            ray_color *= vec3<f32>(0.9f);
+            ray_color *= vec3<f32>(0.63f, 0.32f, 0.10f);
             incoming_light += emitted_light * ray_color;
 
             let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));

@@ -1,7 +1,8 @@
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
+use crate::log_error;
 use crate::texture::Texture;
-use crate::{Vec3f, log_error};
+use crate::vector::{Mat4f, Vec3f};
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -10,6 +11,7 @@ pub struct Scene {
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub bvh: BVH,
+    pub camera: Camera,
 }
 
 impl Scene {
@@ -27,6 +29,11 @@ impl Scene {
                 return None;
             }
         }
+    }
+
+    pub fn set_camera(&mut self, camera: Camera) -> &Self {
+        self.camera = camera;
+        return self;
     }
 }
 
@@ -146,6 +153,49 @@ impl Default for Material {
             metallic: 0.0,
             base_color_tex_id: -1,
             emission_tex_id: -1,
+        };
+    }
+}
+
+#[derive(Clone)]
+pub struct Camera {
+    pub pitch: f32,
+    pub yaw: f32,
+    pub position: Vec3f,
+    forward: Vec3f,
+    up: Vec3f,
+    right: Vec3f,
+    pub inverse_view: Mat4f,
+}
+
+impl Camera {
+    pub fn update_view(&mut self) {
+        let direction = Vec3f::new(
+            f32::cos(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
+            f32::sin(f32::to_radians(self.pitch)),
+            f32::sin(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
+        );
+        self.forward = direction.normalized();
+        self.right = Vec3f::cross(Vec3f::new(0.0, 1.0, 0.0), self.forward).normalized();
+        self.up = Vec3f::cross(self.forward, self.right);
+        self.inverse_view = Mat4f::inverse(Mat4f::look_at(
+            self.position,
+            self.position + self.forward,
+            self.up,
+        ));
+    }
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        return Self {
+            pitch: 0.0,
+            yaw: 0.0,
+            position: Vec3f::new(0.0, 0.0, 0.0),
+            forward: Vec3f::new(0.0, 0.0, -1.0),
+            up: Vec3f::new(0.0, 1.0, 0.0),
+            right: Vec3f::new(1.0, 0.0, 0.0),
+            inverse_view: Mat4f::default(),
         };
     }
 }

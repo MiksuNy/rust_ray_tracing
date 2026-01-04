@@ -1,7 +1,7 @@
 use crate::log_info;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
-use crate::vector::Vec3f;
+use crate::vector::{Vec3Swizzles, Vec3f};
 use ray::Ray;
 use rayon::prelude::*;
 
@@ -33,15 +33,18 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
             for _ in 0..renderer.options.samples {
+                let jitter = Vec3f::new(
+                    Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
+                    Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
+                    0.0,
+                ) * 0.0005;
+                let direction = (scene.camera.inverse_view
+                    * Vec3f::new(-screen_x + jitter.x(), screen_y + jitter.y(), 1.0))
+                .normalized();
                 let mut ray = Ray::new(
                     // Hard coded camera position
-                    Vec3f::new(0.0, 0.0, 5.0),
-                    Vec3f::new(
-                        screen_x + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
-                        screen_y + (Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0) * 0.0005,
-                        -2.0,
-                    )
-                    .normalized(),
+                    scene.camera.position,
+                    direction,
                 );
 
                 final_color += Ray::trace(
