@@ -35,9 +35,8 @@ impl OBJ {
 
             if !std::fs::exists(mtl_path_str).unwrap() {
                 log_warning!(
-                    "An mtllib line was found but the corresponding .mtl file was not found"
+                    "An mtllib line was found but the corresponding .mtl file was not found, using default material for scene"
                 );
-                log_info!("Using default material for scene");
                 obj.materials = vec![Material::default()];
                 has_mtl = false;
             } else {
@@ -211,7 +210,7 @@ pub struct VertexBuffer {
     pub normals: Vec<[f32; 3]>,
 }
 
-/// In a .obj file, triangles are represented as indices (f) to a buffer of vertex data (v, vn, vt)
+/// In a .obj file, triangles are represented as indices (f) to a buffer of vertex data (v, vt, vn)
 #[derive(Default)]
 pub struct Triangle {
     pub positions: [usize; 3],
