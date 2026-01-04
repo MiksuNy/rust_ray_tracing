@@ -13,9 +13,9 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 1;
+const SAMPLE_COUNT: usize = 10;
 const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/dragon/dragon.obj";
+const OBJ_PATH: &str = "../res/checkered_emission_test.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
         samples: SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         output_image_dimensions: (WIDTH, HEIGHT),
-        backend: RendererBackend::WGPU,
+        backend: RendererBackend::CPU,
     }) else {
         return;
     };
@@ -32,9 +32,9 @@ fn main() {
         return;
     };
     scene.set_camera(Camera::default());
-    scene.camera.position = Vec3f::new(-1.2, 2.0, 1.8);
+    scene.camera.position = Vec3f::new(-0.3, 0.5, 0.6);
     scene.camera.pitch = 45.0;
-    scene.camera.yaw = 70.0;
+    scene.camera.yaw = 120.0;
     scene.camera.update_view();
 
     renderer.render_scene_to_path(&scene, IMAGE_PATH);

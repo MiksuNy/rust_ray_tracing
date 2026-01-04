@@ -8,7 +8,7 @@ var <storage, read> triangles : array<Triangle>;
 var <storage, read> bvh_nodes : array<Node>;
 
 @group(0) @binding(3)
-var <uniform> camera_inverse_view : mat4x4<f32>;
+var <uniform> camera_look_at : mat4x4<f32>;
 
 @group(0) @binding(4)
 var <uniform> camera_position : vec3<f32>;
@@ -64,7 +64,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     for (var i = 0u; i < samples; i++) {
         var ray = Ray();
         ray.origin = camera_position;
-        ray.direction = normalize(camera_inverse_view * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
+        let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
+        ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
 
         final_color += trace(&ray, &rng_seed, 6u);
     }

@@ -93,9 +93,9 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         bvh_buffer.size() as f32 / 1024.0 / 1024.0,
         bvh_buffer.size() / size_of::<Node>() as u64
     );
-    let camera_view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Camera view"),
-        contents: bytemuck::cast_slice(&scene.camera.inverse_view.data),
+    let camera_look_at_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Camera look at"),
+        contents: bytemuck::cast_slice(&scene.camera.look_at.data),
         usage: wgpu::BufferUsages::UNIFORM,
     });
     let camera_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -177,7 +177,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             },
             wgpu::BindGroupEntry {
                 binding: 3,
-                resource: camera_view_buffer.as_entire_binding(),
+                resource: camera_look_at_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 4,

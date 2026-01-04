@@ -38,7 +38,7 @@ pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                     Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
                     0.0,
                 ) * 0.0005;
-                let direction = (scene.camera.inverse_view
+                let direction = (scene.camera.look_at
                     * Vec3f::new(-screen_x + jitter.x(), screen_y + jitter.y(), 1.0))
                 .normalized();
                 let mut ray = Ray::new(

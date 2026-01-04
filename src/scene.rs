@@ -157,7 +157,7 @@ impl Default for Material {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Camera {
     pub pitch: f32,
     pub yaw: f32,
@@ -165,7 +165,7 @@ pub struct Camera {
     forward: Vec3f,
     up: Vec3f,
     right: Vec3f,
-    pub inverse_view: Mat4f,
+    pub look_at: Mat4f,
 }
 
 impl Camera {
@@ -175,27 +175,12 @@ impl Camera {
             f32::sin(f32::to_radians(self.pitch)),
             f32::sin(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
         );
-        self.forward = direction.normalized();
-        self.right = Vec3f::cross(Vec3f::new(0.0, 1.0, 0.0), self.forward).normalized();
-        self.up = Vec3f::cross(self.forward, self.right);
-        self.inverse_view = Mat4f::inverse(Mat4f::look_at(
-            self.position,
-            self.position + self.forward,
-            self.up,
-        ));
-    }
-}
+        let world_up = Vec3f::new(0.0, 1.0, 0.0);
 
-impl Default for Camera {
-    fn default() -> Self {
-        return Self {
-            pitch: 0.0,
-            yaw: 0.0,
-            position: Vec3f::new(0.0, 0.0, 0.0),
-            forward: Vec3f::new(0.0, 0.0, -1.0),
-            up: Vec3f::new(0.0, 1.0, 0.0),
-            right: Vec3f::new(1.0, 0.0, 0.0),
-            inverse_view: Mat4f::default(),
-        };
+        self.forward = direction.normalized();
+        self.right = Vec3f::cross(world_up, self.forward).normalized();
+        self.up = Vec3f::cross(self.forward, self.right);
+
+        self.look_at = Mat4f::look_at(self.position, self.position + self.forward, self.up);
     }
 }
