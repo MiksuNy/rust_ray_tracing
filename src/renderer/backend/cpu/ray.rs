@@ -1,7 +1,6 @@
-use crate::Vec3f;
 use crate::bvh::Node;
 use crate::scene::{Scene, Triangle};
-use crate::vector::Vec3Swizzles;
+use crate::vector::{Vec2f, Vec3Swizzles, Vec3f};
 
 #[derive(Clone, Copy)]
 pub struct Ray {
@@ -45,22 +44,10 @@ impl Ray {
             normal = normal.reversed();
         }
 
-        let t_0: Vec3f = Vec3f::new(
-            tri.vertices[0].tex_coord[0],
-            tri.vertices[0].tex_coord[1],
-            0.0,
-        );
-        let t_1: Vec3f = Vec3f::new(
-            tri.vertices[1].tex_coord[0],
-            tri.vertices[1].tex_coord[1],
-            0.0,
-        );
-        let t_2: Vec3f = Vec3f::new(
-            tri.vertices[2].tex_coord[0],
-            tri.vertices[2].tex_coord[1],
-            0.0,
-        );
-        let uv = (t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v)).xy();
+        let t_0 = Vec2f::new(tri.vertices[0].tex_coord[0], tri.vertices[0].tex_coord[1]);
+        let t_1 = Vec2f::new(tri.vertices[1].tex_coord[0], tri.vertices[1].tex_coord[1]);
+        let t_2 = Vec2f::new(tri.vertices[2].tex_coord[0], tri.vertices[2].tex_coord[1]);
+        let uv = t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v);
 
         return HitInfo {
             has_hit: t > 0.0
@@ -216,7 +203,7 @@ struct HitInfo {
     point: Vec3f,
     normal: Vec3f,
     distance: f32,
-    uv: [f32; 2],
+    uv: Vec2f,
     material_id: u32,
     front_face: bool,
 }
@@ -228,7 +215,7 @@ impl Default for HitInfo {
             point: Vec3f::default(),
             normal: Vec3f::default(),
             distance: 1e30f32,
-            uv: [0.0; 2],
+            uv: Vec2f::default(),
             material_id: 0,
             front_face: false,
         };

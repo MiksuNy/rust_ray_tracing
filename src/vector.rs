@@ -9,6 +9,7 @@ pub struct Vec3f {
     pub data: [f32; 3],
 }
 
+#[allow(dead_code)]
 impl Vec3f {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         return Self { data: [x, y, z] };
@@ -501,5 +502,227 @@ impl Vec3Swizzles for Vec3f {
 
     fn zzz(&self) -> [Self::T; 3] {
         return [self.data[2], self.data[2], self.data[2]];
+    }
+}
+
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct Vec2f {
+    pub data: [f32; 2],
+}
+
+#[allow(dead_code)]
+impl Vec2f {
+    pub fn new(x: f32, y: f32) -> Self {
+        return Self { data: [x, y] };
+    }
+
+    pub fn length(self) -> f32 {
+        return f32::sqrt((self.x() * self.x()) + (self.y() * self.y()));
+    }
+
+    pub fn distance(a: Self, b: Self) -> f32 {
+        return Self::sub(a, b).length();
+    }
+
+    pub fn normalized(self) -> Self {
+        return Self {
+            data: [self.x() / self.length(), self.y() / self.length()],
+        };
+    }
+
+    pub fn dot(a: Self, b: Self) -> f32 {
+        return (a.x() * b.x()) + (a.y() * b.y());
+    }
+
+    pub fn min(a: Self, b: Self) -> Self {
+        return Self {
+            data: [f32::min(a.x(), b.x()), f32::min(a.y(), b.y())],
+        };
+    }
+
+    pub fn max(a: Self, b: Self) -> Self {
+        return Self {
+            data: [f32::max(a.x(), b.x()), f32::max(a.y(), b.y())],
+        };
+    }
+
+    pub fn abs(self) -> Self {
+        return Self {
+            data: [f32::abs(self.x()), f32::abs(self.y())],
+        };
+    }
+
+    pub fn reversed(self) -> Self {
+        return Self {
+            data: [-self.x(), -self.y()],
+        };
+    }
+
+    pub fn lerp(a: Self, b: Self, amount: f32) -> Self {
+        return (a * (1.0 - amount)) + b * amount;
+    }
+}
+
+impl Display for Vec2f {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.x(), self.y())
+    }
+}
+
+impl From<f32> for Vec2f {
+    fn from(value: f32) -> Self {
+        return Self {
+            data: [value, value],
+        };
+    }
+}
+
+impl From<[f32; 2]> for Vec2f {
+    fn from(value: [f32; 2]) -> Self {
+        return Self { data: value };
+    }
+}
+
+impl Add for Vec2f {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        return Self {
+            data: [self.x() + rhs.x(), self.y() + rhs.y()],
+        };
+    }
+}
+
+impl AddAssign for Vec2f {
+    fn add_assign(&mut self, rhs: Self) {
+        self.data[0] += rhs.data[0];
+        self.data[1] += rhs.data[1];
+    }
+}
+
+impl Sub for Vec2f {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        return Self {
+            data: [self.x() - rhs.x(), self.y() - rhs.y()],
+        };
+    }
+}
+
+impl SubAssign for Vec2f {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.data[0] -= rhs.data[0];
+        self.data[1] -= rhs.data[1];
+    }
+}
+
+impl Mul for Vec2f {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        return Self {
+            data: [self.x() * rhs.x(), self.y() * rhs.y()],
+        };
+    }
+}
+
+impl Mul<f32> for Vec2f {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        return Self {
+            data: [self.x() * rhs, self.y() * rhs],
+        };
+    }
+}
+
+impl MulAssign for Vec2f {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.data[0] *= rhs.data[0];
+        self.data[1] *= rhs.data[1];
+    }
+}
+
+impl MulAssign<f32> for Vec2f {
+    fn mul_assign(&mut self, rhs: f32) {
+        self.data[0] *= rhs;
+        self.data[1] *= rhs;
+    }
+}
+
+impl Div for Vec2f {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        return Self {
+            data: [self.x() / rhs.x(), self.y() / rhs.y()],
+        };
+    }
+}
+
+impl Div<f32> for Vec2f {
+    type Output = Self;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        return Self {
+            data: [self.x() / rhs, self.y() / rhs],
+        };
+    }
+}
+
+impl DivAssign for Vec2f {
+    fn div_assign(&mut self, rhs: Self) {
+        self.data[0] /= rhs.data[0];
+        self.data[1] /= rhs.data[1];
+    }
+}
+
+impl DivAssign<f32> for Vec2f {
+    fn div_assign(&mut self, rhs: f32) {
+        self.data[0] /= rhs;
+        self.data[1] /= rhs;
+    }
+}
+
+#[allow(dead_code)]
+pub trait Vec2Swizzles {
+    type T;
+
+    fn x(&self) -> Self::T;
+    fn y(&self) -> Self::T;
+
+    fn xx(&self) -> [Self::T; 2];
+    fn xy(&self) -> [Self::T; 2];
+    fn yx(&self) -> [Self::T; 2];
+    fn yy(&self) -> [Self::T; 2];
+}
+
+impl Vec2Swizzles for Vec2f {
+    type T = f32;
+
+    fn x(&self) -> Self::T {
+        return self.data[0];
+    }
+
+    fn y(&self) -> Self::T {
+        return self.data[1];
+    }
+
+    fn xx(&self) -> [Self::T; 2] {
+        return [self.data[0], self.data[0]];
+    }
+
+    fn xy(&self) -> [Self::T; 2] {
+        return [self.data[0], self.data[1]];
+    }
+
+    fn yx(&self) -> [Self::T; 2] {
+        return [self.data[1], self.data[0]];
+    }
+
+    fn yy(&self) -> [Self::T; 2] {
+        return [self.data[1], self.data[1]];
     }
 }

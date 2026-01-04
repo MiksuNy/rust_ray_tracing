@@ -1,4 +1,7 @@
-use crate::log_error;
+use crate::{
+    log_error,
+    vector::{Vec2Swizzles, Vec2f},
+};
 
 #[derive(Clone, Default)]
 pub struct Texture {
@@ -23,9 +26,9 @@ impl Texture {
         })
     }
 
-    pub fn color_at(&self, uv: [f32; 2]) -> [u8; 3] {
-        let i: i32 = (uv[0] * self.width as f32) as i32;
-        let j: i32 = (uv[1] * self.height as f32) as i32;
+    pub fn color_at(&self, uv: Vec2f) -> [u8; 3] {
+        let i: i32 = (uv.x() * self.width as f32) as i32;
+        let j: i32 = (uv.y() * self.height as f32) as i32;
         let mut index: i32 = i + (j * self.width as i32);
         while index > self.pixel_data.len() as i32 - 1 {
             index -= self.pixel_data.len() as i32 - 1;
