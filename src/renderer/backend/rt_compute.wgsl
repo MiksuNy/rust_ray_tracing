@@ -93,7 +93,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
         ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
 
-        final_color += trace(&ray, &rng_seed, 1u);
+        final_color += trace(&ray, &rng_seed, 6u);
     }
     final_color /= f32(samples);
     final_color = linear_to_srgb(final_color);
@@ -119,11 +119,15 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
             let hit_material = materials[hit_info.material_id];
 
             if hit_material.base_color_tex_id != 0xFFFFFFFF {
-                return sample_texture(hit_material.base_color_tex_id, hit_info.uv).xyz;
+                ray_color *= sample_texture(hit_material.base_color_tex_id, hit_info.uv).xyz;
             } else {
-                return hit_material.base_color;
+                ray_color *= hit_material.base_color;
             }
-            emitted_light += hit_material.emission;
+            if hit_material.emission_tex_id != 0xFFFFFFFF {
+                emitted_light += sample_texture(hit_material.emission_tex_id, hit_info.uv).xyz;
+            } else {
+                emitted_light += hit_material.emission;
+            }
             incoming_light += emitted_light * ray_color;
 
             let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));
@@ -382,20 +386,10 @@ fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
 }
 
 fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
-    if texture_index >= arrayLength(&texture_info) {
-        return vec4<f32>(1.0, 0.0, 1.0, 1.0);
-    }
     let info = texture_info[texture_index];
     let i: i32 = i32(uv.x * f32(info.width));
     let j: i32 = i32(uv.y * f32(info.height));
-    var index: i32 = i + i32(j * i32(info.width));
     let data_len = i32(info.width * info.height);
-    while index > data_len - 1 {
-        index -= data_len - 1;
-    }
-    while index < 0 {
-        index += data_len - 1;
-    }
-    index += i32(info.data_offset);
+    let index: i32 = i + j * i32(info.width) % data_len + i32(info.data_offset);
     return unpack4x8unorm(texture_data[u32(index)]);
 }

@@ -15,7 +15,7 @@ const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const SAMPLE_COUNT: usize = 10;
 const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/bistro/Interior/interior.obj";
+const OBJ_PATH: &str = "../res/balls.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
