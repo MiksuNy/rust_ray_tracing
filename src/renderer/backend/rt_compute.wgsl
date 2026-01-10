@@ -2,16 +2,43 @@
 var texture: texture_storage_2d<rgba8unorm, read_write>;
 
 @group(0) @binding(1)
-var <storage, read> triangles : array<Triangle>;
+var <storage, read> triangles: array<Triangle>;
 
 @group(0) @binding(2)
-var <storage, read> bvh_nodes : array<Node>;
+var <storage, read> bvh_nodes: array<Node>;
 
 @group(0) @binding(3)
-var <uniform> camera_look_at : mat4x4<f32>;
+var <storage, read> materials: array<Material>;
 
 @group(0) @binding(4)
-var <uniform> camera_position : vec3<f32>;
+var <storage, read> texture_data: array<u32>;
+
+@group(0) @binding(5)
+var <storage, read> texture_info: array<TextureInfo>;
+
+@group(1) @binding(0)
+var <uniform> camera_look_at : mat4x4<f32>;
+
+@group(1) @binding(1)
+var <uniform> camera_position: vec3<f32>;
+
+struct TextureInfo {
+    width: u32,
+    height: u32,
+    data_offset: u32,
+}
+
+struct Material {
+    base_color: vec3<f32>,
+    specular_tint: vec3<f32>,
+    emission: vec3<f32>,
+    transmission: f32,
+    ior: f32,
+    roughness: f32,
+    metallic: f32,
+    base_color_tex_id: u32,
+    emission_tex_id: u32,
+}
 
 struct Node {
     bounds_min: vec3<f32>,
@@ -20,7 +47,6 @@ struct Node {
     num_tris: u32,
 }
 
-// TODO: Make this fit into 32 bytes
 struct Vertex {
     position: vec3<f32>,
     normal: vec3<f32>,
@@ -67,11 +93,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
         ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
 
-        final_color += trace(&ray, &rng_seed, 6u);
+        final_color += trace(&ray, &rng_seed, 1u);
     }
     final_color /= f32(samples);
     final_color = linear_to_srgb(final_color);
 
+    //var ray = Ray();
+    //ray.origin = camera_position;
+    //ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
     //let debug_color = debug_bvh(ray, 300.0f);
 
     textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
@@ -87,7 +116,14 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
         let hit_info = traverse_bvh(*ray);
 
         if hit_info.has_hit {
-            ray_color *= vec3<f32>(0.63f, 0.32f, 0.10f);
+            let hit_material = materials[hit_info.material_id];
+
+            if hit_material.base_color_tex_id != 0xFFFFFFFF {
+                return sample_texture(hit_material.base_color_tex_id, hit_info.uv).xyz;
+            } else {
+                return hit_material.base_color;
+            }
+            emitted_light += hit_material.emission;
             incoming_light += emitted_light * ray_color;
 
             let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));
@@ -310,7 +346,7 @@ fn xor_shift(input: ptr<function, u32>) -> u32 {
 }
 
 fn rand_f32(input: ptr<function, u32>) -> f32 {
-    return f32(xor_shift(input)) / f32(4294967295u);
+    return f32(xor_shift(input)) / f32(0xFFFFFFFF);
 }
 
 fn rand_f32_nd(input: ptr<function, u32>) -> f32 {
@@ -343,4 +379,23 @@ fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
 fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
     let f_0 = pow(ior - 1.0, 2) / pow(ior + 1.0, 2);
     return f_0 + (1.0 - f_0) * pow(1.0 - n_dot_v, 5);
+}
+
+fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
+    if texture_index >= arrayLength(&texture_info) {
+        return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+    }
+    let info = texture_info[texture_index];
+    let i: i32 = i32(uv.x * f32(info.width));
+    let j: i32 = i32(uv.y * f32(info.height));
+    var index: i32 = i + i32(j * i32(info.width));
+    let data_len = i32(info.width * info.height);
+    while index > data_len - 1 {
+        index -= data_len - 1;
+    }
+    while index < 0 {
+        index += data_len - 1;
+    }
+    index += i32(info.data_offset);
+    return unpack4x8unorm(texture_data[u32(index)]);
 }

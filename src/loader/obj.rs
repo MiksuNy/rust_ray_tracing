@@ -7,6 +7,7 @@ pub struct OBJ {
     pub vertex_buffer: VertexBuffer,
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
+    material_names: Vec<String>,
 }
 
 impl OBJ {
@@ -82,9 +83,9 @@ impl OBJ {
         for line in lines {
             if line.trim_start().starts_with("usemtl ") && has_mtl {
                 active_material_id = obj
-                    .materials
+                    .material_names
                     .iter()
-                    .position(|mtl| mtl.name == line.strip_prefix("usemtl ").unwrap())
+                    .position(|mtl_name| mtl_name == line.strip_prefix("usemtl ").unwrap())
                     .unwrap();
             } else if line.trim_start().starts_with("f ") {
                 let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
@@ -132,7 +133,8 @@ impl OBJ {
 
             if line.contains("newmtl") {
                 let mut material = Material::default();
-                material.name = line.strip_prefix("newmtl ").unwrap().to_string();
+                obj.material_names
+                    .push(line.strip_prefix("newmtl ").unwrap().to_string());
 
                 loop {
                     if lines.peek().is_none() {
@@ -182,14 +184,14 @@ impl OBJ {
                             let texture = Texture::load(attribute.next().unwrap());
                             if texture.is_some() {
                                 obj.textures.push(texture.unwrap());
-                                material.base_color_tex_id = (obj.textures.len() - 1) as i32;
+                                material.base_color_tex_id = (obj.textures.len() - 1) as u32;
                             }
                         }
                         "map_Ke" => {
                             let texture = Texture::load(attribute.next().unwrap());
                             if texture.is_some() {
                                 obj.textures.push(texture.unwrap());
-                                material.emission_tex_id = (obj.textures.len() - 1) as i32;
+                                material.emission_tex_id = (obj.textures.len() - 1) as u32;
                             }
                         }
                         _ => continue,

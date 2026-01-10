@@ -155,7 +155,7 @@ impl Ray {
                     ior = hit_material.ior;
                 }
 
-                if hit_material.base_color_tex_id != -1 {
+                if hit_material.base_color_tex_id != u32::MAX {
                     ray_color *= Vec3f::from(
                         scene.textures[hit_material.base_color_tex_id as usize]
                             .color_at(hit_info.uv),
@@ -163,7 +163,7 @@ impl Ray {
                 } else {
                     ray_color *= hit_material.base_color;
                 }
-                if hit_material.emission_tex_id != -1 {
+                if hit_material.emission_tex_id != u32::MAX {
                     emitted_light += Vec3f::from(
                         scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
                     );

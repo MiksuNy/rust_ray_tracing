@@ -126,33 +126,40 @@ impl Triangle {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Material {
-    pub name: String,
     pub base_color: Vec3f,
+    _pad1: [u8; 4],
     pub specular_tint: Vec3f,
+    _pad2: [u8; 4],
     pub emission: Vec3f,
+    _pad3: [u8; 4],
     pub transmission: f32,
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
-    pub base_color_tex_id: i32,
-    pub emission_tex_id: i32,
+    pub base_color_tex_id: u32,
+    pub emission_tex_id: u32,
+    _pad4: [u8; 8],
 }
 
 impl Default for Material {
     fn default() -> Self {
         return Self {
-            name: String::from("default_material"),
             base_color: Vec3f::new(1.0, 1.0, 1.0),
+            _pad1: [0; 4],
             specular_tint: Vec3f::new(1.0, 1.0, 1.0),
+            _pad2: [0; 4],
             emission: Vec3f::new(0.0, 0.0, 0.0),
+            _pad3: [0; 4],
             transmission: 0.0,
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
-            base_color_tex_id: -1,
-            emission_tex_id: -1,
+            base_color_tex_id: u32::MAX,
+            emission_tex_id: u32::MAX,
+            _pad4: [0; 8],
         };
     }
 }

@@ -7,7 +7,7 @@ use crate::{
 pub struct Texture {
     pub width: usize,
     pub height: usize,
-    pub pixel_data: Vec<[u8; 3]>,
+    pub pixel_data: Vec<[u8; 4]>,
 }
 
 impl Texture {
@@ -22,11 +22,14 @@ impl Texture {
         Some(Self {
             width: img.width() as usize,
             height: img.height() as usize,
-            pixel_data: img.pixels().map(|pixel| pixel.0).collect(),
+            pixel_data: img
+                .pixels()
+                .map(|pixel| [pixel.0[0], pixel.0[1], pixel.0[2], 255])
+                .collect(),
         })
     }
 
-    pub fn color_at(&self, uv: Vec2f) -> [u8; 3] {
+    pub fn color_at(&self, uv: Vec2f) -> [u8; 4] {
         let i: i32 = (uv.x() * self.width as f32) as i32;
         let j: i32 = (uv.y() * self.height as f32) as i32;
         let mut index: i32 = i + (j * self.width as i32);

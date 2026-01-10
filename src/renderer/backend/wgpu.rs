@@ -6,7 +6,7 @@ use crate::{
     bvh::Node,
     log_info,
     renderer::Renderer,
-    scene::{Scene, Triangle},
+    scene::{Material, Scene, Triangle},
     vector::{Mat4f, Vec3f},
 };
 
@@ -39,13 +39,19 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
             | wgpu::Features::TIMESTAMP_QUERY
             | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
-            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES,
+            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
+            | wgpu::Features::TEXTURE_BINDING_ARRAY
+            | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY,
         required_limits: adapter.limits(),
         experimental_features: wgpu::ExperimentalFeatures::disabled(),
         memory_hints: wgpu::MemoryHints::Performance,
         trace: wgpu::Trace::Off,
     }))
     .expect("Failed to create device");
+
+    unsafe {
+        device.start_graphics_debugger_capture();
+    }
 
     let module = device.create_shader_module(wgpu::include_wgsl!("./rt_compute.wgsl"));
 
@@ -74,7 +80,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     });
 
     let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Scene triangles"),
+        label: Some("Triangles"),
         contents: bytemuck::cast_slice(scene.tris.as_slice()),
         usage: wgpu::BufferUsages::STORAGE,
     });
@@ -93,6 +99,54 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         bvh_buffer.size() as f32 / 1024.0 / 1024.0,
         bvh_buffer.size() / size_of::<Node>() as u64
     );
+    let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Materials"),
+        contents: bytemuck::cast_slice(scene.materials.as_slice()),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    log_info!(
+        "Created a storage buffer for materials: {:.2} KB ({} materials)",
+        material_buffer.size() as f32 / 1024.0,
+        material_buffer.size() / size_of::<Material>() as u64
+    );
+    let mut texture_data: Vec<u32> = Vec::new();
+    let mut texture_info: Vec<[u32; 3]> = Vec::new();
+    if !scene.textures.is_empty() {
+        scene.textures.iter().for_each(|texture| {
+            let data = texture
+                .pixel_data
+                .iter()
+                .map(|bytes| {
+                    return u32::from_le_bytes(*bytes);
+                })
+                .collect::<Vec<u32>>();
+            texture_info.push([
+                texture.width as u32,
+                texture.height as u32,
+                texture_data.len() as u32,
+            ]);
+            texture_data.extend_from_slice(data.as_slice());
+        });
+    } else {
+        texture_data.push(0);
+        texture_info.push([0, 0, 0]);
+    }
+    let texture_data_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Texture data"),
+        contents: bytemuck::cast_slice(texture_data.as_slice()),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    let texture_info_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Texture info"),
+        contents: bytemuck::cast_slice(texture_info.as_slice()),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    log_info!(
+        "Created a storage buffer for textures: {:.2} MB ({} textures)",
+        texture_data_buffer.size() as f32 / 1024.0 / 1024.0,
+        scene.textures.len()
+    );
+
     let camera_look_at_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Camera look at"),
         contents: bytemuck::cast_slice(&scene.camera.look_at.data),
@@ -104,7 +158,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         usage: wgpu::BufferUsages::UNIFORM,
     });
 
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+    let buffers_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
         entries: &[
             wgpu::BindGroupLayoutEntry {
@@ -141,6 +195,41 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 binding: 3,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<Material>() as u64)).unwrap(),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(4u64)).unwrap(),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(12u64)).unwrap(),
+                },
+                count: None,
+            },
+        ],
+    });
+    let uniforms_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
                     min_binding_size: Some(NonZeroU64::new(size_of::<Mat4f>() as u64)).unwrap(),
@@ -148,7 +237,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
-                binding: 4,
+                binding: 1,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
@@ -159,9 +248,9 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             },
         ],
     });
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let buffers_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
-        layout: &bind_group_layout,
+        layout: &buffers_group_layout,
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -177,10 +266,28 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             },
             wgpu::BindGroupEntry {
                 binding: 3,
-                resource: camera_look_at_buffer.as_entire_binding(),
+                resource: material_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 4,
+                resource: texture_data_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: texture_info_buffer.as_entire_binding(),
+            },
+        ],
+    });
+    let uniforms_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &uniforms_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_look_at_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
                 resource: camera_position_buffer.as_entire_binding(),
             },
         ],
@@ -188,7 +295,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bind_group_layout],
+        bind_group_layouts: &[&buffers_group_layout, &uniforms_group_layout],
         immediate_size: 0,
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -224,7 +331,8 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             label: None,
             timestamp_writes: None,
         });
-        compute_pass.set_bind_group(0, &bind_group, &[]);
+        compute_pass.set_bind_group(0, &buffers_bind_group, &[]);
+        compute_pass.set_bind_group(1, &uniforms_bind_group, &[]);
         compute_pass.set_pipeline(&pipeline);
         compute_pass.write_timestamp(&timestamp_query_set, 0);
         compute_pass.dispatch_workgroups(
@@ -306,6 +414,10 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         output_data.copy_from_slice(&view[..]);
     }
     output_staging_buffer.unmap();
+
+    unsafe {
+        device.stop_graphics_debugger_capture();
+    }
 
     return output_data;
 }

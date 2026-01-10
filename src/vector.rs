@@ -180,6 +180,16 @@ impl From<[u8; 3]> for Vec3f {
     }
 }
 
+impl From<[u8; 4]> for Vec3f {
+    fn from(color: [u8; 4]) -> Self {
+        return Vec3f::new(
+            color[0] as f32 / 255.0,
+            color[1] as f32 / 255.0,
+            color[2] as f32 / 255.0,
+        );
+    }
+}
+
 impl From<Vec3f> for [u8; 3] {
     fn from(vector: Vec3f) -> Self {
         return [
