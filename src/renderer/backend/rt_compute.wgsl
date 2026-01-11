@@ -131,6 +131,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
             incoming_light += emitted_light * ray_color;
 
             let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));
+
             (*ray).origin = hit_info.point + new_dir * 0.0001f;
             (*ray).direction = new_dir;
 
@@ -177,7 +178,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     var hit_info = HitInfo();
 
     hit_info.has_hit = t > 0.0f && !(det < 0.0f && det > -0.0f) && !(u < 0.0f || u > 1.0f) && !(v < 0.0f || u + v > 1.0f);
-    hit_info.point = ray.origin + (ray.direction * t);
+    hit_info.point = fma(ray.direction, vec3<f32>(t), ray.origin);
     hit_info.distance = t;
 
     let front_face = det > 0.0f;
@@ -214,7 +215,7 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
     var hit_info = HitInfo();
     hit_info.distance = 1e30f;
 
-    var stack = array<Node, 32u>();
+    var stack = array<Node, 16u>();
     var node = bvh_nodes[0u];
     var stack_ptr: u32 = 0u;
 
@@ -267,7 +268,7 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
 }
 
 fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
-    var stack = array<Node, 32u>();
+    var stack = array<Node, 16u>();
     var node = bvh_nodes[0u];
     var stack_ptr: u32 = 0u;
 

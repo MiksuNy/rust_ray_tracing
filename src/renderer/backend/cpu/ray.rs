@@ -79,7 +79,7 @@ impl Ray {
 
     // https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
     fn traverse_bvh(ray: &Self, scene: &Scene, hit_info: &mut HitInfo) {
-        let mut stack: [Node; 64] = [Node::default(); 64];
+        let mut stack: [Node; 32] = [Node::default(); 32];
         let mut node: &Node = scene.bvh.nodes.get(0).unwrap();
         let mut stack_ptr: usize = 0;
 
