@@ -49,10 +49,6 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     }))
     .expect("Failed to create device");
 
-    unsafe {
-        device.start_graphics_debugger_capture();
-    }
-
     let module = device.create_shader_module(wgpu::include_wgsl!("./rt_compute.wgsl"));
 
     let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -414,10 +410,6 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         output_data.copy_from_slice(&view[..]);
     }
     output_staging_buffer.unmap();
-
-    unsafe {
-        device.stop_graphics_debugger_capture();
-    }
 
     return output_data;
 }
