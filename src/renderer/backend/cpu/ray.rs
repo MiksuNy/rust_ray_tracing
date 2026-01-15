@@ -44,9 +44,9 @@ impl Ray {
             normal = normal.reversed();
         }
 
-        let t_0 = Vec2f::new(tri.vertices[0].tex_coord[0], tri.vertices[0].tex_coord[1]);
-        let t_1 = Vec2f::new(tri.vertices[1].tex_coord[0], tri.vertices[1].tex_coord[1]);
-        let t_2 = Vec2f::new(tri.vertices[2].tex_coord[0], tri.vertices[2].tex_coord[1]);
+        let t_0 = Vec2f::new(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
+        let t_1 = Vec2f::new(tri.vertices[1].tex_coord_x, tri.vertices[1].tex_coord_y);
+        let t_2 = Vec2f::new(tri.vertices[2].tex_coord_x, tri.vertices[2].tex_coord_y);
         let uv = t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v);
 
         return HitInfo {

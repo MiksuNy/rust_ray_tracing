@@ -7,7 +7,6 @@ use crate::{
     log_info,
     renderer::Renderer,
     scene::{Material, Scene, Triangle},
-    vector::{Mat4f, Vec3f},
 };
 
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
@@ -143,14 +142,25 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         scene.textures.len()
     );
 
-    let camera_look_at_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Camera look at"),
-        contents: bytemuck::cast_slice(&scene.camera.look_at.data),
+    let camera_look_at: &[u8] = bytemuck::cast_slice(&scene.camera.look_at.data);
+    let camera_position: &[u8] = bytemuck::cast_slice(&scene.camera.position.data);
+    let camera_data: Vec<u8> = [camera_look_at, camera_position, &[0u8; 4]]
+        .iter()
+        .cloned()
+        .flatten()
+        .cloned()
+        .collect();
+    let camera_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Camera uniforms"),
+        contents: bytemuck::cast_slice(camera_data.as_slice()),
         usage: wgpu::BufferUsages::UNIFORM,
     });
-    let camera_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Camera position"),
-        contents: bytemuck::cast_slice(&scene.camera.position.data),
+    let renderer_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Renderer uniforms"),
+        contents: bytemuck::cast_slice(&[
+            renderer.options.samples as u32,
+            renderer.options.max_ray_depth as u32,
+        ]),
         usage: wgpu::BufferUsages::UNIFORM,
     });
 
@@ -228,7 +238,10 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(size_of::<Mat4f>() as u64)).unwrap(),
+                    min_binding_size: Some(NonZeroU64::new(
+                        (size_of_val(camera_data.as_slice())) as u64,
+                    ))
+                    .unwrap(),
                 },
                 count: None,
             },
@@ -238,7 +251,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(size_of::<Vec3f>() as u64)).unwrap(),
+                    min_binding_size: Some(NonZeroU64::new(8u64)).unwrap(),
                 },
                 count: None,
             },
@@ -280,11 +293,11 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: camera_look_at_buffer.as_entire_binding(),
+                resource: camera_uniform_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: camera_position_buffer.as_entire_binding(),
+                resource: renderer_uniform_buffer.as_entire_binding(),
             },
         ],
     });

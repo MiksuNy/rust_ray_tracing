@@ -2,7 +2,7 @@ use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
 use crate::log_error;
 use crate::texture::Texture;
-use crate::vector::{Mat4f, Vec3f};
+use crate::vector::{Mat4f, Vec3Swizzles, Vec3f};
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -31,9 +31,9 @@ impl Scene {
         }
     }
 
-    pub fn set_camera(&mut self, camera: Camera) -> &Self {
+    pub fn set_camera(&mut self, camera: Camera) {
         self.camera = camera;
-        return self;
+        self.camera.update_view();
     }
 }
 
@@ -44,25 +44,26 @@ impl From<OBJ> for Scene {
         for obj_tri in obj.tris {
             let mut vertices: [Vertex; 3] = [Vertex::default(); 3];
             for i in 0..3 {
+                let position = *obj
+                    .vertex_buffer
+                    .positions
+                    .get(obj_tri.positions[i])
+                    .unwrap_or(&[0.0; 3]);
+                let tex_coord = *obj
+                    .vertex_buffer
+                    .tex_coords
+                    .get(obj_tri.tex_coords[i])
+                    .unwrap_or(&[0.0; 2]);
+                let normal = *obj
+                    .vertex_buffer
+                    .normals
+                    .get(obj_tri.normals[i])
+                    .unwrap_or(&[0.0; 3]);
                 vertices[i] = Vertex {
-                    position: *obj
-                        .vertex_buffer
-                        .positions
-                        .get(obj_tri.positions[i])
-                        .unwrap_or(&[0.0; 3]),
-                    _pad1: [0; 4],
-                    normal: *obj
-                        .vertex_buffer
-                        .normals
-                        .get(obj_tri.normals[i])
-                        .unwrap_or(&[0.0; 3]),
-                    _pad2: [0; 4],
-                    tex_coord: *obj
-                        .vertex_buffer
-                        .tex_coords
-                        .get(obj_tri.tex_coords[i])
-                        .unwrap_or(&[0.0; 2]),
-                    _pad3: [0; 8],
+                    position: position.into(),
+                    tex_coord_x: tex_coord[0],
+                    normal: normal.into(),
+                    tex_coord_y: tex_coord[1],
                 };
             }
             scene
@@ -82,12 +83,10 @@ impl From<OBJ> for Scene {
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 pub struct Vertex {
-    pub position: [f32; 3],
-    _pad1: [u8; 4],
-    pub normal: [f32; 3],
-    _pad2: [u8; 4],
-    pub tex_coord: [f32; 2],
-    _pad3: [u8; 8],
+    pub position: Vec3f,
+    pub tex_coord_x: f32,
+    pub normal: Vec3f,
+    pub tex_coord_y: f32,
 }
 
 // This needs to derive some bytemuck traits so we can put 'em in a buffer on the GPU
@@ -110,17 +109,17 @@ impl Triangle {
 
     pub fn mid(&self) -> Vec3f {
         return Vec3f::new(
-            (self.vertices[0].position[0]
-                + self.vertices[1].position[0]
-                + self.vertices[2].position[0])
+            (self.vertices[0].position.x()
+                + self.vertices[1].position.x()
+                + self.vertices[2].position.x())
                 / 3.0,
-            (self.vertices[0].position[1]
-                + self.vertices[1].position[1]
-                + self.vertices[2].position[1])
+            (self.vertices[0].position.y()
+                + self.vertices[1].position.y()
+                + self.vertices[2].position.y())
                 / 3.0,
-            (self.vertices[0].position[2]
-                + self.vertices[1].position[2]
-                + self.vertices[2].position[2])
+            (self.vertices[0].position.z()
+                + self.vertices[1].position.z()
+                + self.vertices[2].position.z())
                 / 3.0,
         );
     }
@@ -140,15 +139,16 @@ pub struct Material {
     pub metallic: f32,
     pub base_color_tex_id: u32,
     pub emission_tex_id: u32,
-    _pad3: [u8; 12],
+    pub transparency_tex_id: u32,
+    _pad3: [u8; 8],
 }
 
 impl Default for Material {
     fn default() -> Self {
         return Self {
-            base_color: Vec3f::new(1.0, 1.0, 1.0),
+            base_color: Vec3f::from(0.8),
             _pad1: [0; 4],
-            specular_tint: Vec3f::new(1.0, 1.0, 1.0),
+            specular_tint: Vec3f::from(1.0),
             _pad2: [0; 4],
             emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
@@ -157,7 +157,8 @@ impl Default for Material {
             metallic: 0.0,
             base_color_tex_id: u32::MAX,
             emission_tex_id: u32::MAX,
-            _pad3: [0; 12],
+            transparency_tex_id: u32::MAX,
+            _pad3: [0; 8],
         };
     }
 }

@@ -45,7 +45,6 @@ impl Renderer {
             RendererBackend::CPU => backend::cpu::render_scene(self, scene),
             RendererBackend::WGPU => pollster::block_on(backend::wgpu::render_scene(self, scene)),
         };
-        // FIXME: This is not accurate at all, especially with the wgpu backend
         log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
         let width = self.options.output_image_dimensions.0;

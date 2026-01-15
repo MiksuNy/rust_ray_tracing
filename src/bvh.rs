@@ -183,8 +183,8 @@ impl Node {
     fn grow_by_tri(&mut self, tri: &Triangle) {
         tri.vertices.iter().for_each(|vert| {
             for i in 0..3 {
-                self.bounds_min.data[i] = f32::min(self.bounds_min.data[i], vert.position[i]);
-                self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position[i]);
+                self.bounds_min.data[i] = f32::min(self.bounds_min.data[i], vert.position.data[i]);
+                self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position.data[i]);
             }
         });
     }

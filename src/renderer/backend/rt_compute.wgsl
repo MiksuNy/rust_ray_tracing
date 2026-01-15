@@ -17,10 +17,20 @@ var <storage, read> texture_data: array<u32>;
 var <storage, read> texture_info: array<TextureInfo>;
 
 @group(1) @binding(0)
-var <uniform> camera_look_at : mat4x4<f32>;
+var <uniform> camera: Camera;
 
 @group(1) @binding(1)
-var <uniform> camera_position: vec3<f32>;
+var <uniform> renderer_info: RendererInfo;
+
+struct RendererInfo {
+    samples: u32,
+    max_ray_depth: u32,
+}
+
+struct Camera {
+    look_at: mat4x4<f32>,
+    position: vec3<f32>,
+}
 
 struct TextureInfo {
     width: u32,
@@ -38,6 +48,7 @@ struct Material {
     metallic: f32,
     base_color_tex_id: u32,
     emission_tex_id: u32,
+    transparency_tex_id: u32,
 }
 
 struct Node {
@@ -49,8 +60,9 @@ struct Node {
 
 struct Vertex {
     position: vec3<f32>,
+    tex_coord_x: f32,
     normal: vec3<f32>,
-    tex_coord: vec2<f32>,
+    tex_coord_y: f32,
 }
 
 struct Triangle {
@@ -85,39 +97,50 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // TODO: This breaks silently at high sample counts.
     // The loop should probably be done on the CPU and on the GPU we just read from a texture containing the previous sample's pixel data.
-    let samples = 10u;
     var final_color = vec3<f32>(0.0);
-    for (var i = 0u; i < samples; i++) {
+    for (var i = 0u; i < renderer_info.samples; i++) {
         var ray = Ray();
-        ray.origin = camera_position;
+        ray.origin = camera.position;
         let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
-        ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
+        ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
 
-        final_color += trace(&ray, &rng_seed, 6u);
+        final_color += trace(&ray, &rng_seed, renderer_info.max_ray_depth);
     }
-    final_color /= f32(samples);
+    final_color /= f32(renderer_info.samples);
     final_color = linear_to_srgb(final_color);
 
     //var ray = Ray();
-    //ray.origin = camera_position;
-    //ray.direction = normalize(camera_look_at * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
-    //let debug_color = debug_bvh(ray, 300.0f);
+    //ray.origin = camera.position;
+    //ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
+    //let final_color = debug_bvh(ray, 300.0f);
 
     textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
 }
 
-fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) -> vec3<f32> {
+fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
     var ray_color = vec3<f32>(1.0f);
     var incoming_light = vec3<f32>(0.0f);
     var emitted_light = vec3<f32>(0.0f);
 
-    var curr_depth: u32 = 0u;
-    while curr_depth < max_depth {
+    var curr_ray_depth: u32 = 0u;
+    while curr_ray_depth < max_ray_depth {
         let hit_info = traverse_bvh(*ray);
 
         if hit_info.has_hit {
             let hit_material = materials[hit_info.material_id];
 
+            //var ior: f32 = hit_material.ior;
+            //if hit_info.front_face {
+            //    ior = 1.0 / hit_material.ior;
+            //}
+
+            if hit_material.transparency_tex_id != 0xFFFFFFFF {
+                let transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
+                if transparency < rand_f32(rng_seed) {
+                    (*ray).origin = hit_info.point + (*ray).direction * 0.0001f;
+                    continue;
+                }
+            }
             if hit_material.base_color_tex_id != 0xFFFFFFFF {
                 ray_color *= sample_texture(hit_material.base_color_tex_id, hit_info.uv).xyz;
             } else {
@@ -135,7 +158,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
             (*ray).origin = hit_info.point + new_dir * 0.0001f;
             (*ray).direction = new_dir;
 
-            curr_depth += 1u;
+            curr_ray_depth += 1u;
         } else {
             let sky_color = vec3<f32>(0.99f, 0.97f, 0.98f);
             let sky_strength = vec3<f32>(1.0f);
@@ -148,10 +171,10 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_depth: u32) 
         }
     }
 
-    if curr_depth == 0u {
+    if curr_ray_depth == 0u {
         return incoming_light;
     } else {
-        return incoming_light / f32(curr_depth);
+        return incoming_light / f32(curr_ray_depth);
     }
 }
 
@@ -188,11 +211,11 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     let n_1 = tri.vertices[1].normal;
     let n_2 = tri.vertices[2].normal;
     var normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
-    hit_info.normal = select(-normal, normal, front_face);
+    hit_info.normal = normalize(select(-normal, normal, front_face));
 
-    let t_0 = tri.vertices[0].tex_coord;
-    let t_1 = tri.vertices[1].tex_coord;
-    let t_2 = tri.vertices[2].tex_coord;
+    let t_0 = vec2<f32>(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
+    let t_1 = vec2<f32>(tri.vertices[1].tex_coord_x, tri.vertices[1].tex_coord_y);
+    let t_2 = vec2<f32>(tri.vertices[2].tex_coord_x, tri.vertices[2].tex_coord_y);
     hit_info.uv = t_0 * (1.0f - u - v) + (t_1 * u) + (t_2 * v);
 
     hit_info.material_id = tri.material_id;

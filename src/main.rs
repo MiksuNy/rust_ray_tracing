@@ -13,9 +13,9 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 10;
+const SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/bistro/Interior/interior.obj";
+const OBJ_PATH: &str = "../res/knife_assassin/knife_assassin.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -31,11 +31,12 @@ fn main() {
     let Some(mut scene) = Scene::load(OBJ_PATH) else {
         return;
     };
-    scene.set_camera(Camera::default());
-    scene.camera.position = Vec3f::new(0.0, 0.0, 3.0);
-    scene.camera.pitch = 0.0;
-    scene.camera.yaw = 90.0;
-    scene.camera.update_view();
+
+    let mut camera = Camera::default();
+    camera.position = Vec3f::new(0.0, 0.0, 1.6);
+    camera.pitch = 0.0;
+    camera.yaw = 90.0;
+    scene.set_camera(camera);
 
     renderer.render_scene_to_path(&scene, IMAGE_PATH);
 }

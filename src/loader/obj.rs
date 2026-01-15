@@ -14,6 +14,8 @@ impl OBJ {
     pub fn load(path: &str) -> Self {
         let mut obj = OBJ::default();
 
+        log_info!("Loading scene from '{}'", path);
+
         let start_time = std::time::Instant::now();
 
         let buffer = std::fs::read_to_string(path).unwrap();
@@ -177,21 +179,70 @@ impl OBJ {
                         "Tf" => {
                             material.transmission = attribute.next().unwrap().parse().unwrap();
                         }
-                        // NOTE: Materials can have duplicate textures, this might not be a problem
-                        // for smaller scenes but maybe we should check if a texture is already in
-                        // memory and just use that instead of duplicating?
                         "map_Kd" => {
-                            let texture = Texture::load(attribute.next().unwrap());
-                            if texture.is_some() {
-                                obj.textures.push(texture.unwrap());
+                            let texture_path = attribute.next().unwrap();
+                            let Some(texture) = Texture::load(texture_path) else {
+                                continue;
+                            };
+
+                            let mut index: i32 = -1;
+                            for (i, other_texture) in obj.textures.iter().enumerate() {
+                                if texture.hash == other_texture.hash {
+                                    index = i as i32;
+                                    break;
+                                }
+                            }
+
+                            if index == -1 {
+                                obj.textures.push(texture);
                                 material.base_color_tex_id = (obj.textures.len() - 1) as u32;
+                                log_info!("Loaded texture from '{}'", texture_path);
+                            } else {
+                                material.base_color_tex_id = index as u32;
                             }
                         }
                         "map_Ke" => {
-                            let texture = Texture::load(attribute.next().unwrap());
-                            if texture.is_some() {
-                                obj.textures.push(texture.unwrap());
+                            let texture_path = attribute.next().unwrap();
+                            let Some(texture) = Texture::load(texture_path) else {
+                                continue;
+                            };
+
+                            let mut index: i32 = -1;
+                            for (i, other_texture) in obj.textures.iter().enumerate() {
+                                if texture.hash == other_texture.hash {
+                                    index = i as i32;
+                                    break;
+                                }
+                            }
+
+                            if index == -1 {
+                                obj.textures.push(texture);
                                 material.emission_tex_id = (obj.textures.len() - 1) as u32;
+                                log_info!("Loaded texture from '{}'", texture_path);
+                            } else {
+                                material.emission_tex_id = index as u32;
+                            }
+                        }
+                        "map_d" => {
+                            let texture_path = attribute.next().unwrap();
+                            let Some(texture) = Texture::load(texture_path) else {
+                                continue;
+                            };
+
+                            let mut index: i32 = -1;
+                            for (i, other_texture) in obj.textures.iter().enumerate() {
+                                if texture.hash == other_texture.hash {
+                                    index = i as i32;
+                                    break;
+                                }
+                            }
+
+                            if index == -1 {
+                                obj.textures.push(texture);
+                                material.transparency_tex_id = (obj.textures.len() - 1) as u32;
+                                log_info!("Loaded texture from '{}'", texture_path);
+                            } else {
+                                material.transparency_tex_id = index as u32;
                             }
                         }
                         _ => continue,
