@@ -7,6 +7,7 @@ use crate::{
     log_info,
     renderer::Renderer,
     scene::{Material, Scene, Triangle},
+    vector::{Mat4f, Vec3f},
 };
 
 pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
@@ -74,100 +75,13 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         mapped_at_creation: false,
     });
 
-    let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Triangles"),
-        contents: bytemuck::cast_slice(scene.tris.as_slice()),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    log_info!(
-        "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
-        triangle_buffer.size() as f32 / 1024.0 / 1024.0,
-        triangle_buffer.size() / size_of::<Triangle>() as u64
-    );
-    let bvh_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("BVH nodes"),
-        contents: bytemuck::cast_slice(scene.bvh.nodes.as_slice()),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    log_info!(
-        "Created a storage buffer for BVH nodes: {:.2} MB ({} nodes)",
-        bvh_buffer.size() as f32 / 1024.0 / 1024.0,
-        bvh_buffer.size() / size_of::<Node>() as u64
-    );
-    let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Materials"),
-        contents: bytemuck::cast_slice(scene.materials.as_slice()),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    log_info!(
-        "Created a storage buffer for materials: {:.2} KB ({} materials)",
-        material_buffer.size() as f32 / 1024.0,
-        material_buffer.size() / size_of::<Material>() as u64
-    );
-    let mut texture_data: Vec<u32> = Vec::new();
-    let mut texture_info: Vec<[u32; 3]> = Vec::new();
-    if !scene.textures.is_empty() {
-        scene.textures.iter().for_each(|texture| {
-            let data = texture
-                .pixel_data
-                .iter()
-                .map(|bytes| {
-                    return u32::from_le_bytes(*bytes);
-                })
-                .collect::<Vec<u32>>();
-            texture_info.push([
-                texture.width as u32,
-                texture.height as u32,
-                texture_data.len() as u32,
-            ]);
-            texture_data.extend_from_slice(data.as_slice());
-        });
-    } else {
-        texture_data.push(0);
-        texture_info.push([0, 0, 0]);
-    }
-    let texture_data_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Texture data"),
-        contents: bytemuck::cast_slice(texture_data.as_slice()),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    let texture_info_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Texture info"),
-        contents: bytemuck::cast_slice(texture_info.as_slice()),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    log_info!(
-        "Created a storage buffer for textures: {:.2} MB ({} textures)",
-        texture_data_buffer.size() as f32 / 1024.0 / 1024.0,
-        scene.textures.len()
-    );
+    let storage_buffers = StorageBuffers::setup(&device, scene);
+    let uniform_buffers = UniformBuffers::setup(&device, scene, renderer);
 
-    let camera_look_at: &[u8] = bytemuck::cast_slice(&scene.camera.look_at.data);
-    let camera_position: &[u8] = bytemuck::cast_slice(&scene.camera.position.data);
-    let camera_data: Vec<u8> = [camera_look_at, camera_position, &[0u8; 4]]
-        .iter()
-        .cloned()
-        .flatten()
-        .cloned()
-        .collect();
-    let camera_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Camera uniforms"),
-        contents: bytemuck::cast_slice(camera_data.as_slice()),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
-    let renderer_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Renderer uniforms"),
-        contents: bytemuck::cast_slice(&[
-            renderer.options.samples as u32,
-            renderer.options.max_ray_depth as u32,
-        ]),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
-
-    let buffers_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
+    let texture_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
@@ -176,135 +90,25 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(size_of::<Triangle>() as u64)).unwrap(),
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(size_of::<Node>() as u64)).unwrap(),
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(size_of::<Material>() as u64)).unwrap(),
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 4,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(4u64)).unwrap(),
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 5,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(12u64)).unwrap(),
-                },
-                count: None,
-            },
-        ],
-    });
-    let uniforms_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            }],
+        });
+
+    let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(
-                        (size_of_val(camera_data.as_slice())) as u64,
-                    ))
-                    .unwrap(),
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(NonZeroU64::new(8u64)).unwrap(),
-                },
-                count: None,
-            },
-        ],
-    });
-    let buffers_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &buffers_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&storage_texture_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: triangle_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: bvh_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: material_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 4,
-                resource: texture_data_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 5,
-                resource: texture_info_buffer.as_entire_binding(),
-            },
-        ],
-    });
-    let uniforms_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &uniforms_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_uniform_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: renderer_uniform_buffer.as_entire_binding(),
-            },
-        ],
+        layout: &texture_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&storage_texture_view),
+        }],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&buffers_group_layout, &uniforms_group_layout],
+        bind_group_layouts: &[
+            &texture_bind_group_layout,
+            &storage_buffers.bind_group_layout,
+            &uniform_buffers.bind_group_layout,
+        ],
         immediate_size: 0,
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -316,22 +120,6 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         cache: None,
     });
 
-    let timestamp_capacity: u32 = 2;
-    let timestamp_query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
-        label: None,
-        ty: wgpu::QueryType::Timestamp,
-        count: timestamp_capacity,
-    });
-    let timestamp_query_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: (timestamp_capacity * 8) as u64,
-        usage: wgpu::BufferUsages::QUERY_RESOLVE
-            | wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_SRC
-            | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
     let mut command_encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     {
@@ -340,16 +128,15 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
             label: None,
             timestamp_writes: None,
         });
-        compute_pass.set_bind_group(0, &buffers_bind_group, &[]);
-        compute_pass.set_bind_group(1, &uniforms_bind_group, &[]);
+        compute_pass.set_bind_group(0, &texture_bind_group, &[]);
+        compute_pass.set_bind_group(1, &storage_buffers.bind_group, &[]);
+        compute_pass.set_bind_group(2, &uniform_buffers.bind_group, &[]);
         compute_pass.set_pipeline(&pipeline);
-        compute_pass.write_timestamp(&timestamp_query_set, 0);
         compute_pass.dispatch_workgroups(
             (renderer.options.output_image_dimensions.0 / 8) as u32,
             (renderer.options.output_image_dimensions.1 / 8) as u32,
             1,
         );
-        compute_pass.write_timestamp(&timestamp_query_set, 1);
         // End compute pass
     }
 
@@ -375,41 +162,7 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
         },
     );
 
-    command_encoder.resolve_query_set(
-        &timestamp_query_set,
-        0..timestamp_capacity,
-        &timestamp_query_buffer,
-        0,
-    );
-
     queue.submit(Some(command_encoder.finish()));
-
-    let timestamp_read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: timestamp_query_buffer.size(),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut copy_encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    copy_encoder.copy_buffer_to_buffer(
-        &timestamp_query_buffer,
-        0,
-        &timestamp_read_buffer,
-        0,
-        timestamp_query_buffer.size(),
-    );
-    queue.submit(Some(copy_encoder.finish()));
-    timestamp_read_buffer.map_async(wgpu::MapMode::Read, .., |_| {});
-    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-    let timestamps_range = timestamp_read_buffer.get_mapped_range(..);
-    let timestamps = bytemuck::cast_slice::<u8, u64>(timestamps_range.get(..).unwrap());
-    let timestamp_difference_ms = (timestamps[1] - timestamps[0]) as f32 / 1000.0 / 1000.0;
-    log_info!(
-        "Compute shader dispatch took {:.2} ms ({:.2} fps)",
-        timestamp_difference_ms,
-        1000.0 / timestamp_difference_ms
-    );
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = output_staging_buffer.slice(..);
@@ -425,4 +178,225 @@ pub async fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
     output_staging_buffer.unmap();
 
     return output_data;
+}
+
+struct Buffer {
+    buffer: wgpu::Buffer,
+    binding: u32,
+    bind_group_layout_entry: wgpu::BindGroupLayoutEntry,
+}
+
+impl Buffer {
+    fn create_storage_buffer<T: bytemuck::NoUninit>(
+        device: &wgpu::Device,
+        binding: u32,
+        data: &[T],
+    ) -> Self {
+        return Self {
+            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(data),
+                usage: wgpu::BufferUsages::STORAGE,
+            }),
+            bind_group_layout_entry: wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<T>() as u64)).unwrap(),
+                },
+                count: None,
+            },
+            binding,
+        };
+    }
+
+    fn create_uniform_buffer<T: bytemuck::NoUninit>(
+        device: &wgpu::Device,
+        binding: u32,
+        data: &[T],
+    ) -> Self {
+        return Self {
+            buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(data),
+                usage: wgpu::BufferUsages::UNIFORM,
+            }),
+            bind_group_layout_entry: wgpu::BindGroupLayoutEntry {
+                binding: binding,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(NonZeroU64::new(size_of::<T>() as u64)).unwrap(),
+                },
+                count: None,
+            },
+            binding,
+        };
+    }
+
+    fn bind_group_entry<'a>(&'a self) -> wgpu::BindGroupEntry<'a> {
+        wgpu::BindGroupEntry {
+            binding: self.binding,
+            resource: self.buffer.as_entire_binding(),
+        }
+    }
+}
+
+struct StorageBuffers {
+    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    triangle_buffer: Buffer,
+    bvh_buffer: Buffer,
+    material_buffer: Buffer,
+    texture_data_buffer: Buffer,
+    texture_info_buffer: Buffer,
+}
+
+impl StorageBuffers {
+    fn setup(device: &wgpu::Device, scene: &Scene) -> Self {
+        let triangle_buffer = Buffer::create_storage_buffer(device, 0, &scene.tris);
+        let bvh_buffer = Buffer::create_storage_buffer(device, 1, &scene.bvh.nodes);
+        let material_buffer = Buffer::create_storage_buffer(device, 2, &scene.materials);
+        log_info!(
+            "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
+            triangle_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            triangle_buffer.buffer.size() / size_of::<Triangle>() as u64
+        );
+        log_info!(
+            "Created a storage buffer for BVH nodes: {:.2} MB ({} nodes)",
+            bvh_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            bvh_buffer.buffer.size() / size_of::<Node>() as u64
+        );
+        log_info!(
+            "Created a storage buffer for materials: {:.2} KB ({} materials)",
+            material_buffer.buffer.size() as f32 / 1024.0,
+            material_buffer.buffer.size() / size_of::<Material>() as u64
+        );
+        let mut texture_data: Vec<u32> = Vec::new();
+        let mut texture_info: Vec<[u32; 3]> = Vec::new();
+        if !scene.textures.is_empty() {
+            scene.textures.iter().for_each(|texture| {
+                let data = texture
+                    .pixel_data
+                    .iter()
+                    .map(|bytes| {
+                        return u32::from_le_bytes(*bytes);
+                    })
+                    .collect::<Vec<u32>>();
+                texture_info.push([
+                    texture.width as u32,
+                    texture.height as u32,
+                    texture_data.len() as u32,
+                ]);
+                texture_data.extend_from_slice(data.as_slice());
+            });
+        } else {
+            texture_data.push(0);
+            texture_info.push([0, 0, 0]);
+        }
+        let texture_data_buffer = Buffer::create_storage_buffer(device, 3, &texture_data);
+        let texture_info_buffer = Buffer::create_storage_buffer(device, 4, &texture_info);
+        log_info!(
+            "Created a storage buffer for textures: {:.2} MB ({} textures)",
+            texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            scene.textures.len()
+        );
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                triangle_buffer.bind_group_layout_entry,
+                bvh_buffer.bind_group_layout_entry,
+                material_buffer.bind_group_layout_entry,
+                texture_data_buffer.bind_group_layout_entry,
+                texture_info_buffer.bind_group_layout_entry,
+            ],
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_group_layout,
+            entries: &[
+                triangle_buffer.bind_group_entry(),
+                bvh_buffer.bind_group_entry(),
+                material_buffer.bind_group_entry(),
+                texture_data_buffer.bind_group_entry(),
+                texture_info_buffer.bind_group_entry(),
+            ],
+        });
+
+        return Self {
+            bind_group,
+            bind_group_layout,
+            triangle_buffer,
+            bvh_buffer,
+            material_buffer,
+            texture_data_buffer,
+            texture_info_buffer,
+        };
+    }
+}
+
+struct UniformBuffers {
+    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    camera_buffer: Buffer,
+    renderer_buffer: Buffer,
+}
+
+impl UniformBuffers {
+    fn setup(device: &wgpu::Device, scene: &Scene, renderer: &Renderer) -> Self {
+        let uniform_camera = UniformCamera {
+            look_at: scene.camera.look_at,
+            position: scene.camera.position,
+            _pad: [0; 4],
+        };
+        let camera_buffer = Buffer::create_uniform_buffer(device, 0, &[uniform_camera]);
+        let uniform_renderer = UniformRenderer {
+            samples: renderer.options.samples as u32,
+            max_ray_depth: renderer.options.max_ray_depth as u32,
+        };
+        let renderer_buffer = Buffer::create_uniform_buffer(device, 1, &[uniform_renderer]);
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                camera_buffer.bind_group_layout_entry,
+                renderer_buffer.bind_group_layout_entry,
+            ],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_group_layout,
+            entries: &[
+                camera_buffer.bind_group_entry(),
+                renderer_buffer.bind_group_entry(),
+            ],
+        });
+
+        return Self {
+            bind_group,
+            bind_group_layout,
+            camera_buffer,
+            renderer_buffer,
+        };
+    }
+}
+
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
+struct UniformCamera {
+    look_at: Mat4f,
+    position: Vec3f,
+    _pad: [u8; 4],
+}
+
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+struct UniformRenderer {
+    samples: u32,
+    max_ray_depth: u32,
 }

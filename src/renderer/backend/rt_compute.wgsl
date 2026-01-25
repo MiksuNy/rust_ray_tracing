@@ -1,26 +1,29 @@
 @group(0) @binding(0)
 var texture: texture_storage_2d<rgba8unorm, read_write>;
 
-@group(0) @binding(1)
+@group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
 
-@group(0) @binding(2)
+@group(1) @binding(1)
 var <storage, read> bvh_nodes: array<Node>;
 
-@group(0) @binding(3)
+@group(1) @binding(2)
 var <storage, read> materials: array<Material>;
 
-@group(0) @binding(4)
+@group(1) @binding(3)
 var <storage, read> texture_data: array<u32>;
 
-@group(0) @binding(5)
+@group(1) @binding(4)
 var <storage, read> texture_info: array<TextureInfo>;
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var <uniform> camera: Camera;
 
-@group(1) @binding(1)
+@group(2) @binding(1)
 var <uniform> renderer_info: RendererInfo;
+
+const PI = 3.1415926535f;
+const TWO_PI = PI * PI;
 
 struct RendererInfo {
     samples: u32,
@@ -49,6 +52,8 @@ struct Material {
     base_color_tex_id: u32,
     emission_tex_id: u32,
     transparency_tex_id: u32,
+    roughness_tex_id: u32,
+    metallic_tex_id: u32,
 }
 
 struct Node {
@@ -108,6 +113,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
     final_color /= f32(renderer_info.samples);
     final_color = linear_to_srgb(final_color);
+    final_color = aces_filmic(final_color);
 
     //var ray = Ray();
     //ray.origin = camera.position;
@@ -127,13 +133,11 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
         let hit_info = traverse_bvh(*ray);
 
         if hit_info.has_hit {
-            let hit_material = materials[hit_info.material_id];
+            curr_ray_depth += 1u;
 
-            //var ior: f32 = hit_material.ior;
-            //if hit_info.front_face {
-            //    ior = 1.0 / hit_material.ior;
-            //}
+            let hit_material = get_material(hit_info, materials[hit_info.material_id]);
 
+            // TODO: Add transparency as a material property
             if hit_material.transparency_tex_id != 0xFFFFFFFF {
                 let transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
                 if transparency < rand_f32(rng_seed) {
@@ -141,26 +145,55 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                     continue;
                 }
             }
-            if hit_material.base_color_tex_id != 0xFFFFFFFF {
-                ray_color *= sample_texture(hit_material.base_color_tex_id, hit_info.uv).xyz;
-            } else {
+
+            var tangent: vec3<f32>;
+            var bitangent: vec3<f32>;
+            build_orthonormal_basis(hit_info.normal, &tangent, &bitangent);
+            let tbn = mat3x3<f32>(tangent, bitangent, hit_info.normal);
+
+            let alpha = clamp(hit_material.roughness * hit_material.roughness, 0.0001f, 1.0f);
+            let sampled_normal = to_world(tbn, sample_ggx_vndf(to_local(tbn, -(*ray).direction), alpha, alpha, rng_seed));
+
+            var f0 = vec3<f32>(pow(1.0f - hit_material.ior, 2) / pow(1.0f + hit_material.ior, 2));
+            f0 = mix(f0, hit_material.base_color, hit_material.metallic);
+            let fresnel = schlick_fresnel(dot(sampled_normal, -(*ray).direction), f0);
+
+            let specular_dir = normalize(reflect((*ray).direction, sampled_normal));
+            let lambertian_dir = normalize(to_world(tbn, sample_cosine_hemisphere(rng_seed)));
+            let refracted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
+
+            let is_metallic = hit_material.metallic > rand_f32(rng_seed);
+
+            var new_dir: vec3<f32>;
+            if length(fresnel) < rand_f32(rng_seed) && !is_metallic {
                 ray_color *= hit_material.base_color;
-            }
-            if hit_material.emission_tex_id != 0xFFFFFFFF {
-                emitted_light += sample_texture(hit_material.emission_tex_id, hit_info.uv).xyz;
+
+                new_dir = lambertian_dir;
+                if hit_material.transmission > rand_f32(rng_seed) {
+                    new_dir = refracted_dir;
+                    if dot(new_dir, hit_info.normal) > 0.0f {
+                        break;
+                    }
+                }
             } else {
-                emitted_light += hit_material.emission;
+                if is_metallic {
+                    ray_color *= fresnel;
+                }
+
+                new_dir = specular_dir;
+                if dot(new_dir, hit_info.normal) < 0.0f {
+                    break;
+                }
             }
+
+            emitted_light += hit_material.emission;
             incoming_light += emitted_light * ray_color;
-
-            let new_dir = normalize(hit_info.normal + rand_in_unit_sphere(rng_seed));
-
             (*ray).origin = hit_info.point + new_dir * 0.0001f;
             (*ray).direction = new_dir;
-
-            curr_ray_depth += 1u;
         } else {
-            let sky_color = vec3<f32>(0.99f, 0.97f, 0.98f);
+            curr_ray_depth += 1u;
+
+            let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
             let sky_strength = vec3<f32>(1.0f);
 
             ray_color *= sky_color;
@@ -171,11 +204,44 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
         }
     }
 
-    if curr_ray_depth == 0u {
-        return incoming_light;
-    } else {
-        return incoming_light / f32(curr_ray_depth);
+    return incoming_light / f32(curr_ray_depth);
+}
+
+// Helper function to get actual material properties of the hit surface
+fn get_material(hit_info: HitInfo, hit_material: Material) -> Material {
+    var out_material = hit_material;
+
+    var ior: f32 = hit_material.ior;
+    if hit_info.front_face {
+        ior = 1.0 / hit_material.ior;
     }
+    out_material.ior = ior;
+
+    var base_color = hit_material.base_color;
+    if hit_material.base_color_tex_id != 0xFFFFFFFF {
+        base_color = sample_texture(hit_material.base_color_tex_id, hit_info.uv).rgb;
+    }
+    out_material.base_color = base_color;
+
+    var roughness = hit_material.roughness;
+    if hit_material.roughness_tex_id != 0xFFFFFFFF {
+        roughness = sample_texture(hit_material.roughness_tex_id, hit_info.uv).r;
+    }
+    out_material.roughness = roughness;
+
+    var metallic = hit_material.metallic;
+    if hit_material.metallic_tex_id != 0xFFFFFFFF {
+        metallic = sample_texture(hit_material.metallic_tex_id, hit_info.uv).r;
+    }
+    out_material.metallic = metallic;
+
+    var emission = hit_material.emission;
+    if hit_material.emission_tex_id != 0xFFFFFFFF {
+        emission = sample_texture(hit_material.emission_tex_id, hit_info.uv).rgb;
+    }
+    out_material.emission = emission;
+
+    return out_material;
 }
 
 fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
@@ -230,7 +296,6 @@ fn intersect_node(ray: Ray, node: Node) -> f32 {
     let t_2 = max(t_min, t_max);
     let t_near = max(max(t_1.x, t_1.y), t_1.z);
     let t_far = min(min(t_2.x, t_2.y), t_2.z);
-
     return select(1e30f, t_near, t_near <= t_far && t_far > 0.0f);
 }
 
@@ -355,7 +420,7 @@ fn turbo_colormap(x_ptr: ptr<function, f32>) -> vec3<f32> {
 
     var x = *x_ptr;
     x = clamp(x, 0.0f, 1.0f);
-    let v4 = vec4<f32>( 1.0, x, x * x, x * x * x);
+    let v4 = vec4<f32>(1.0, x, x * x, x * x * x);
     let v2 = v4.zw * v4.z;
     return vec3<f32>(
         dot(v4, kRedVec4)   + dot(v2, kRedVec2),
@@ -377,25 +442,6 @@ fn rand_f32(input: ptr<function, u32>) -> f32 {
     return f32(xor_shift(input)) / f32(0xFFFFFFFF);
 }
 
-fn rand_f32_nd(input: ptr<function, u32>) -> f32 {
-    let theta = 6.283185f * rand_f32(input);
-    let rho = sqrt(-2.0f * log(rand_f32(input)));
-    return rho * cos(theta);
-}
-
-fn rand_in_unit_sphere(input: ptr<function, u32>) -> vec3<f32> {
-    return normalize(vec3<f32>(
-        rand_f32_nd(input),
-        rand_f32_nd(input),
-        rand_f32_nd(input)
-    ));
-}
-
-fn rand_in_unit_hemisphere(input: ptr<function, u32>, normal: vec3<f32>) -> vec3<f32> {
-    let unit_sphere = rand_in_unit_sphere(input);
-    return faceForward(-unit_sphere, unit_sphere, normal);
-}
-
 // https://gamedev.stackexchange.com/a/194038
 fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
     let cutoff = vec3<f32>(f32(linear.r < 0.0031308f), f32(linear.g < 0.0031308f), f32(linear.b < 0.0031308f));
@@ -404,9 +450,14 @@ fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
     return mix(higher, lower, cutoff);
 }
 
-fn schlick_fresnel(n_dot_v: f32, ior: f32) -> f32 {
-    let f_0 = pow(ior - 1.0, 2) / pow(ior + 1.0, 2);
-    return f_0 + (1.0 - f_0) * pow(1.0 - n_dot_v, 5);
+// https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+fn aces_filmic(x: vec3<f32>) -> vec3<f32> {
+    let a = 2.51f;
+    let b = 0.03f;
+    let c = 2.43f;
+    let d = 0.59f;
+    let e = 0.14f;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0f), vec3<f32>(1.0f));
 }
 
 fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
@@ -416,4 +467,57 @@ fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
     let data_len = i32(info.width * info.height);
     let index: i32 = i + j * i32(info.width) % data_len + i32(info.data_offset);
     return unpack4x8unorm(texture_data[u32(index)]);
+}
+
+fn sample_ggx_vndf(ve: vec3<f32>, ax: f32, ay: f32, rng_seed: ptr<function, u32>) -> vec3<f32> {
+    let u1 = rand_f32(rng_seed);
+    let u2 = rand_f32(rng_seed);
+
+    let Vh = normalize(vec3<f32>(ax * ve.x, ay * ve.y, ve.z));
+
+    let lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    let T1 = select(vec3<f32>(1.0f, 0.0f, 0.0f), vec3<f32>(-Vh.y, Vh.x, 0.0f) * inverseSqrt(lensq), lensq > 0.0f);
+    let T2 = cross(Vh, T1);
+
+    let r = sqrt(u1);
+    let phi = 2.0f * PI * u2;
+    let t1 = r * cos(phi);
+    var t2 = r * sin(phi);
+    let s = 0.5f * (1.0f + Vh.z);
+    t2 = (1.0f - s) * sqrt(1.0f - t1 * t1) + s * t2;
+
+    let Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0f, 1.0f - t1 * t1 - t2 * t2)) * Vh;
+
+    let Ne = normalize(vec3<f32>(ax * Nh.x, ay * Nh.y, max(0.0f, Nh.z)));
+    return Ne;
+}
+
+fn sample_cosine_hemisphere(rng_seed: ptr<function, u32>) -> vec3<f32> {
+    let u1 = rand_f32(rng_seed);
+    let u2 = rand_f32(rng_seed);
+    let r = sqrt(u1);
+    let theta = TWO_PI * u2;
+    var dir: vec3<f32>;
+    dir.x = r * cos(theta);
+    dir.y = r * sin(theta);
+    dir.z = sqrt(max(0.0f, 1.0f - u1));
+    return dir;
+}
+
+fn schlick_fresnel(n_dot_v: f32, f0: vec3<f32>) -> vec3<f32> {
+    return f0 + (1.0f - f0) * pow(1.0f - n_dot_v, 5);
+}
+
+fn to_local(tbn: mat3x3<f32>, world: vec3<f32>) -> vec3<f32> {
+    return transpose(tbn) * world;
+}
+
+fn to_world(tbn: mat3x3<f32>, local: vec3<f32>) -> vec3<f32> {
+    return tbn * local;
+}
+
+fn build_orthonormal_basis(normal: vec3<f32>, tangent: ptr<function, vec3<f32>>, bitangent: ptr<function, vec3<f32>>) {
+    let up = select(vec3<f32>(1.0f, 0.0f, 0.0f), vec3<f32>(0.0f, 0.0f, 1.0f), abs(normal.z) < 0.9999999f);
+    *tangent = normalize(cross(up, normal));
+    *bitangent = cross(normal, *tangent);
 }
