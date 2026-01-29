@@ -1,9 +1,9 @@
 pub mod cpu;
-pub mod wgpu;
+pub mod gpu;
 
 #[derive(Default, Debug)]
 pub enum RendererBackend {
-    #[default]
     CPU,
-    WGPU,
+    #[default]
+    GPU,
 }

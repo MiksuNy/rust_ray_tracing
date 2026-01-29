@@ -1,25 +1,26 @@
-# A CPU ray tracer written in Rust.
+# Path tracer written in Rust
 
 Features
 --------
-- Supports .obj models (only triangulated models, limited support for PBR materials)
-- Very limited support for textures (base color and emission for now)
-- Smooth shading (vertex normals)
-- BVH
+- GPU rendering backend with [wgpu](https://crates.io/crates/wgpu)
+- CPU rendering backend, multithreaded with [rayon](https://crates.io/crates/rayon)
+    - NOTE: The GPU backend is more feature complete for now
+- Custom OBJ loader (only triangulated models) + MTL with some PBR features
 - Textures and output images use this [image](https://crates.io/crates/image) crate for decoding and encoding
+- Smooth shading (per vertex normals)
+- BVH with binned SAH
 --------
 
 Todo (in order of priority)
 --------
-- Implement a proper BRDF system for materials
-- Option to use the GPU for rendering
-- Command line arguments for scenes and other parameters
+- Realtime mode with movable camera
+- Proper BSDF system for materials
+- Bring CPU backend to feature parity with GPU backend
 - Scenes
     - glTF support
 - Better BVH
-- Better multithreaded rendering
+- Command line arguments for scenes and other parameters
 --------
-
 
 Gallery
 --------
@@ -38,6 +39,7 @@ Resources & references
 --------
 - [This book series](https://raytracing.github.io/) is *the* best resource for anyone looking to start their own ray tracer.
 - A huge shout out to [this blog](https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/) for helping me make the BVH system for this project.
+- Sebastian Lague's [video series](https://www.youtube.com/watch?v=Qz0KTGYJtUk&list=PLFt_AvWsXl0dlgwe4JQ0oZuleqOTjmox3) on ray tracing.
 --------
 
 Known issues
