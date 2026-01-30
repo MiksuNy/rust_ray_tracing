@@ -13,9 +13,9 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 100;
-const MAX_BOUNCES: usize = 128;
-const OBJ_PATH: &str = "../res/cows.obj";
+const SAMPLE_COUNT: usize = 10;
+const MAX_BOUNCES: usize = 12;
+const OBJ_PATH: &str = "../res/chinese_dragon/dragon_13M.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = Vec3f::new(0.0, 0.0, 2.0);
+    camera.position = Vec3f::new(0.0, 0.0, 1.0);
     camera.pitch = 0.0;
     camera.yaw = 90.0;
     scene.set_camera(camera);
