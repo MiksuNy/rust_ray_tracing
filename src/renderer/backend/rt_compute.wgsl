@@ -23,7 +23,9 @@ var <uniform> camera: Camera;
 var <uniform> renderer_info: RendererInfo;
 
 const PI = 3.1415926535f;
-const TWO_PI = PI * PI;
+const TWO_PI = 6.283185307f;
+const PI_OVER_2 = 1.5707963268f;
+const PI_OVER_4 = 0.7853981634f;
 
 struct RendererInfo {
     samples: u32,
@@ -159,7 +161,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             let fresnel = schlick_fresnel(dot(sampled_normal, -(*ray).direction), f0);
 
             let specular_dir = normalize(reflect((*ray).direction, sampled_normal));
-            let lambertian_dir = normalize(to_world(tbn, sample_cosine_hemisphere(rng_seed)));
+            let lambertian_dir = normalize(to_world(tbn, cosine_sample_hemisphere(rng_seed)));
             let refracted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
 
             let is_metallic = hit_material.metallic > rand_f32(rng_seed);
@@ -492,16 +494,30 @@ fn sample_ggx_vndf(ve: vec3<f32>, ax: f32, ay: f32, rng_seed: ptr<function, u32>
     return Ne;
 }
 
-fn sample_cosine_hemisphere(rng_seed: ptr<function, u32>) -> vec3<f32> {
-    let u1 = rand_f32(rng_seed);
-    let u2 = rand_f32(rng_seed);
-    let r = sqrt(u1);
-    let theta = TWO_PI * u2;
-    var dir: vec3<f32>;
-    dir.x = r * cos(theta);
-    dir.y = r * sin(theta);
-    dir.z = sqrt(max(0.0f, 1.0f - u1));
-    return dir;
+// https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#ConcentricSampleDisk
+fn concentric_sample_disk(u: vec2<f32>) -> vec2<f32> {
+    let u_offset = 2.0f * u - vec2<f32>(1.0f);
+    if u_offset.x == 0.0f && u_offset.y == 0.0f {
+        return vec2<f32>(0.0f);
+    }
+    var theta: f32;
+    var r: f32;
+    if abs(u_offset.x) > abs(u_offset.y) {
+        r = u_offset.x;
+        theta = PI_OVER_4 * (u_offset.y / u_offset.x);
+    } else {
+        r = u_offset.y;
+        theta = PI_OVER_2 - PI_OVER_4 * (u_offset.x / u_offset.y);
+    }
+    return r * vec2<f32>(cos(theta), sin(theta));
+}
+
+// https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#CosineSampleHemisphere
+fn cosine_sample_hemisphere(rng_seed: ptr<function, u32>) -> vec3<f32> {
+    let u = vec2<f32>(rand_f32(rng_seed), rand_f32(rng_seed));
+    let d = concentric_sample_disk(u);
+    let z = sqrt(max(0.0f, 1.0f - d.x * d.x - d.y * d.y));
+    return vec3<f32>(d.x, d.y, z);
 }
 
 fn schlick_fresnel(n_dot_v: f32, f0: vec3<f32>) -> vec3<f32> {
