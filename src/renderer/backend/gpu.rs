@@ -245,6 +245,7 @@ impl Buffer {
     }
 }
 
+#[allow(dead_code)]
 struct StorageBuffers {
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -340,6 +341,7 @@ impl StorageBuffers {
     }
 }
 
+#[allow(dead_code)]
 struct UniformBuffers {
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,

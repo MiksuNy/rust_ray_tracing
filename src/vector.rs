@@ -743,6 +743,7 @@ pub struct Mat4f {
     pub data: [[f32; 4]; 4],
 }
 
+#[allow(dead_code)]
 impl Mat4f {
     pub fn new() -> Self {
         return Self {
