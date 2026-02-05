@@ -176,7 +176,7 @@ impl OBJ {
                                 texture_path,
                                 obj,
                                 &mut material,
-                                TextureLoadType::BaseColor,
+                                TextureType::BaseColor,
                             );
                         }
                         "map_Ke" => {
@@ -185,7 +185,7 @@ impl OBJ {
                                 texture_path,
                                 obj,
                                 &mut material,
-                                TextureLoadType::Emission,
+                                TextureType::Emission,
                             );
                         }
                         "map_d" => {
@@ -194,7 +194,7 @@ impl OBJ {
                                 texture_path,
                                 obj,
                                 &mut material,
-                                TextureLoadType::Transparency,
+                                TextureType::Transparency,
                             );
                         }
                         "map_Pr" => {
@@ -203,7 +203,7 @@ impl OBJ {
                                 texture_path,
                                 obj,
                                 &mut material,
-                                TextureLoadType::Roughness,
+                                TextureType::Roughness,
                             );
                         }
                         "map_Pm" => {
@@ -212,7 +212,7 @@ impl OBJ {
                                 texture_path,
                                 obj,
                                 &mut material,
-                                TextureLoadType::Metallic,
+                                TextureType::Metallic,
                             );
                         }
                         _ => continue,
@@ -224,12 +224,7 @@ impl OBJ {
         }
     }
 
-    fn load_texture(
-        path: &str,
-        obj: &mut OBJ,
-        material: &mut Material,
-        texture_type: TextureLoadType,
-    ) {
+    fn load_texture(path: &str, obj: &mut OBJ, material: &mut Material, texture_type: TextureType) {
         let Some(texture) = Texture::load(path) else {
             return;
         };
@@ -242,62 +237,36 @@ impl OBJ {
             }
         }
 
+        let tex_id: u32;
+        if index == -1 {
+            obj.textures.push(texture);
+            log_info!("Loaded texture from '{}'", path);
+            tex_id = (obj.textures.len() - 1) as u32;
+        } else {
+            tex_id = index as u32;
+        }
+
         match texture_type {
-            TextureLoadType::BaseColor => {
-                if index == -1 {
-                    obj.textures.push(texture);
-                    let tex_id = (obj.textures.len() - 1) as u32;
-                    material.base_color_tex_id = tex_id;
-                    log_info!("Loaded texture from '{}'", path);
-                } else {
-                    material.base_color_tex_id = index as u32;
-                }
+            TextureType::BaseColor => {
+                material.base_color_tex_id = tex_id;
             }
-            TextureLoadType::Emission => {
-                if index == -1 {
-                    obj.textures.push(texture);
-                    let tex_id = (obj.textures.len() - 1) as u32;
-                    material.emission_tex_id = tex_id;
-                    log_info!("Loaded texture from '{}'", path);
-                } else {
-                    material.emission_tex_id = index as u32;
-                }
+            TextureType::Emission => {
+                material.emission_tex_id = tex_id;
             }
-            TextureLoadType::Transparency => {
-                if index == -1 {
-                    obj.textures.push(texture);
-                    let tex_id = (obj.textures.len() - 1) as u32;
-                    material.transparency_tex_id = tex_id;
-                    log_info!("Loaded texture from '{}'", path);
-                } else {
-                    material.transparency_tex_id = index as u32;
-                }
+            TextureType::Transparency => {
+                material.transparency_tex_id = tex_id;
             }
-            TextureLoadType::Roughness => {
-                if index == -1 {
-                    obj.textures.push(texture);
-                    let tex_id = (obj.textures.len() - 1) as u32;
-                    material.roughness_tex_id = tex_id;
-                    log_info!("Loaded texture from '{}'", path);
-                } else {
-                    material.roughness_tex_id = index as u32;
-                }
+            TextureType::Roughness => {
+                material.roughness_tex_id = tex_id;
             }
-            TextureLoadType::Metallic => {
-                if index == -1 {
-                    obj.textures.push(texture);
-                    let tex_id = (obj.textures.len() - 1) as u32;
-                    material.metallic_tex_id = tex_id;
-                    log_info!("Loaded texture from '{}'", path);
-                } else {
-                    material.metallic_tex_id = index as u32;
-                }
+            TextureType::Metallic => {
+                material.metallic_tex_id = tex_id;
             }
         }
     }
 }
 
-enum TextureLoadType {
+enum TextureType {
     BaseColor,
     Emission,
     Transparency,
