@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{DeviceEvent, KeyEvent, WindowEvent},
+    event::{DeviceEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHandle},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
@@ -352,6 +352,11 @@ impl ApplicationHandler for App {
             DeviceEvent::MouseMotion { delta } => {
                 camera.yaw += delta.0 as f32 * 0.1;
                 camera.pitch += delta.1 as f32 * 0.1;
+                if camera.pitch >= 89.0 {
+                    camera.pitch = 89.0;
+                } else if camera.pitch <= -89.0 {
+                    camera.pitch = -89.0;
+                }
             }
             DeviceEvent::Key(key_event) => {
                 if key_event.state.is_pressed() {
