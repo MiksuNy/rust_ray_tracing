@@ -170,9 +170,9 @@ pub struct Camera {
     pub pitch: f32,
     pub yaw: f32,
     pub position: Vec3f,
-    forward: Vec3f,
-    up: Vec3f,
-    right: Vec3f,
+    pub forward: Vec3f,
+    pub up: Vec3f,
+    pub right: Vec3f,
     pub look_at: Mat4f,
 }
 

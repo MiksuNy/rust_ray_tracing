@@ -8,7 +8,7 @@ use rayon::prelude::*;
 mod ray;
 
 // TODO: A simple progress indicator for rendering would be nice
-pub fn render_scene(renderer: &Renderer, scene: &Scene) -> Vec<u8> {
+pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
     log_info!(
         "Using {} threads for rendering",
         rayon::current_num_threads()

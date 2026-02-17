@@ -18,7 +18,7 @@ impl Buffer {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(data),
-                usage: wgpu::BufferUsages::STORAGE,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             }),
             bind_group_layout_entry: wgpu::BindGroupLayoutEntry {
                 binding,
@@ -43,7 +43,7 @@ impl Buffer {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(data),
-                usage: wgpu::BufferUsages::UNIFORM,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             }),
             bind_group_layout_entry: wgpu::BindGroupLayoutEntry {
                 binding: binding,
@@ -64,5 +64,9 @@ impl Buffer {
             binding: self.binding,
             resource: self.buffer.as_entire_binding(),
         }
+    }
+
+    pub fn set_buffer_data<T: bytemuck::NoUninit>(&self, queue: &wgpu::Queue, data: &[T]) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data));
     }
 }
