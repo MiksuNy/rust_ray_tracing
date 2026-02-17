@@ -294,6 +294,8 @@ impl ApplicationHandler for App {
         ));
         self.app_state = Some(app_state);
 
+        window.set_cursor_visible(false);
+
         window.request_redraw();
     }
 
