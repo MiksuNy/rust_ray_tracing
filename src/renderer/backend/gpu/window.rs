@@ -1,9 +1,9 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{DeviceEvent, WindowEvent},
+    event::{DeviceEvent, ElementState, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, OwnedDisplayHandle},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
@@ -27,6 +27,7 @@ struct AppState {
     texture: wgpu::Texture,
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
+    key_states: HashSet<PhysicalKey>,
 }
 
 impl AppState {
@@ -160,6 +161,7 @@ impl AppState {
             texture,
             render_pipeline,
             bind_group,
+            key_states: HashSet::new(),
         };
 
         app_state.configure_surface();
@@ -292,6 +294,7 @@ impl ApplicationHandler for App {
             self.renderer,
             &self.scene.clone().borrow(),
         ));
+
         self.app_state = Some(app_state);
 
         window.set_cursor_visible(false);
@@ -300,7 +303,8 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        let state = self.app_state.as_ref().unwrap().state.as_ref().unwrap();
+        let app_state = self.app_state.as_mut().unwrap();
+        let state = app_state.state.as_ref().unwrap();
         match event {
             WindowEvent::CloseRequested => {
                 log_info!("Closing window");
@@ -310,7 +314,7 @@ impl ApplicationHandler for App {
                 let scene = self.scene.clone();
 
                 // Move cursor to the center of window if it's in focus
-                let window = self.app_state.as_ref().unwrap().window.clone();
+                let window = app_state.window.clone();
                 if window.has_focus() {
                     let window_size = window.inner_size();
                     let _ = window.set_cursor_position(PhysicalPosition::new(
@@ -319,9 +323,29 @@ impl ApplicationHandler for App {
                     ));
                 }
 
-                scene.borrow_mut().camera.update_view();
+                let camera = &mut scene.borrow_mut().camera;
 
-                let new_camera_data = UniformCamera::from(scene.borrow().camera.clone());
+                for physical_key in app_state.key_states.iter() {
+                    match physical_key {
+                        PhysicalKey::Code(KeyCode::KeyW) => {
+                            camera.position -= camera.forward * 0.05
+                        }
+                        PhysicalKey::Code(KeyCode::KeyS) => {
+                            camera.position += camera.forward * 0.05
+                        }
+                        PhysicalKey::Code(KeyCode::KeyA) => camera.position -= camera.right * 0.05,
+                        PhysicalKey::Code(KeyCode::KeyD) => camera.position += camera.right * 0.05,
+                        PhysicalKey::Code(KeyCode::Space) => camera.position += camera.up * 0.05,
+                        PhysicalKey::Code(KeyCode::KeyZ) => camera.position -= camera.up * 0.05,
+                        _ => (),
+                    }
+                }
+
+                // Update camera matrix
+                camera.update_view();
+
+                // Upload new camera data to the GPU
+                let new_camera_data = UniformCamera::from(camera.clone());
                 state
                     .uniform_buffers
                     .camera_buffer
@@ -348,6 +372,7 @@ impl ApplicationHandler for App {
         event: winit::event::DeviceEvent,
     ) {
         let scene = self.scene.clone();
+        let key_states = &mut self.app_state.as_mut().unwrap().key_states;
         let camera = &mut scene.borrow_mut().camera;
 
         match event {
@@ -361,15 +386,10 @@ impl ApplicationHandler for App {
                 }
             }
             DeviceEvent::Key(key_event) => {
-                if key_event.state.is_pressed() {
-                    match key_event.physical_key {
-                        PhysicalKey::Code(KeyCode::KeyW) => camera.position -= camera.forward * 0.1,
-                        PhysicalKey::Code(KeyCode::KeyS) => camera.position += camera.forward * 0.1,
-                        PhysicalKey::Code(KeyCode::KeyA) => camera.position -= camera.right * 0.1,
-                        PhysicalKey::Code(KeyCode::KeyD) => camera.position += camera.right * 0.1,
-                        _ => (),
-                    }
-                }
+                match key_event.state {
+                    ElementState::Pressed => key_states.insert(key_event.physical_key),
+                    ElementState::Released => key_states.remove(&key_event.physical_key),
+                };
             }
             _ => (),
         }

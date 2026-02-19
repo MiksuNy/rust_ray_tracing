@@ -51,29 +51,31 @@ impl OBJ {
 
         lines.clone().for_each(|line| {
             let mut split = line.split_whitespace();
-            match split.nth(0).unwrap() {
-                "v" => {
-                    let mut data: [f32; 3] = [0.0; 3];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
+            if let Some(prefix) = split.nth(0) {
+                match prefix {
+                    "v" => {
+                        let mut data: [f32; 3] = [0.0; 3];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.positions.push(data);
                     }
-                    obj.vertex_buffer.positions.push(data);
-                }
-                "vt" => {
-                    let mut data: [f32; 2] = [0.0; 2];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
+                    "vt" => {
+                        let mut data: [f32; 2] = [0.0; 2];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.tex_coords.push(data);
                     }
-                    obj.vertex_buffer.tex_coords.push(data);
-                }
-                "vn" => {
-                    let mut data: [f32; 3] = [0.0; 3];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
+                    "vn" => {
+                        let mut data: [f32; 3] = [0.0; 3];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.normals.push(data);
                     }
-                    obj.vertex_buffer.normals.push(data);
+                    _ => (),
                 }
-                _ => (),
             }
         });
 

@@ -110,7 +110,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         ray.origin = camera.position;
         let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
         ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
-
         final_color += trace(&ray, &rng_seed, renderer_info.max_ray_depth);
     }
     final_color /= f32(renderer_info.samples);

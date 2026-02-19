@@ -17,8 +17,8 @@ mod vector;
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
 const SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/dragon/dragon.obj";
+const MAX_BOUNCES: usize = 4;
+const OBJ_PATH: &str = "../res/chinese_dragon/dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {

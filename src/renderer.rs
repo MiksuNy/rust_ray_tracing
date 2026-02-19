@@ -45,7 +45,7 @@ impl Renderer {
         );
         log_info!("- Sample count:            {}", options.samples);
         log_info!("- Max bounces:             {}", options.max_ray_depth);
-        log_info!("- Backend:                 {:?}\n", options.backend);
+        log_info!("- Backend:                 {:?}", options.backend);
         log_info!("- Realtime:                {}\n", options.is_realtime);
 
         return Some(Self { options });
