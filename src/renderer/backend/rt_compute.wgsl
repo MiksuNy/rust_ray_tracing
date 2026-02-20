@@ -1,8 +1,5 @@
 @group(0) @binding(0)
-var storage_texture: texture_storage_2d<rgba8unorm, write>;
-
-@group(0) @binding(1)
-var accumulation_texture: texture_storage_2d<rgba8unorm, read>;
+var storage_texture: texture_storage_2d<rgba8unorm, read_write>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -112,7 +109,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let tex_coords = vec2<u32>(global_id.xy);
 
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    let accumulation_color = textureLoad(accumulation_texture, tex_coords).rgb;
+    let accumulation_color = textureLoad(storage_texture, tex_coords).rgb;
     let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
     textureStore(storage_texture, tex_coords, vec4<f32>(final_color, 1.0f));

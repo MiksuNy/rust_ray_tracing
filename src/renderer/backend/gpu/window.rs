@@ -217,7 +217,7 @@ impl AppState {
                     label: None,
                     timestamp_writes: None,
                 });
-            compute_pass.set_bind_group(0, &state.textures_bind_group, &[]);
+            compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
             compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
             compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
             compute_pass.set_pipeline(&state.compute_pipeline);
@@ -228,12 +228,6 @@ impl AppState {
                 1,
             );
         }
-
-        command_encoder.copy_texture_to_texture(
-            state.storage_texture.as_image_copy(),
-            state.accumulation_texture.as_image_copy(),
-            state.storage_texture.size(),
-        );
 
         command_encoder.copy_texture_to_texture(
             state.storage_texture.as_image_copy(),
