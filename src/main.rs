@@ -14,11 +14,11 @@ mod scene;
 mod texture;
 mod vector;
 
-const WIDTH: usize = 1920;
-const HEIGHT: usize = 1080;
+const WIDTH: usize = 640;
+const HEIGHT: usize = 480;
 const SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 4;
-const OBJ_PATH: &str = "../res/chinese_dragon/dragon.obj";
+const MAX_BOUNCES: usize = 6;
+const OBJ_PATH: &str = "../res/erato.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {

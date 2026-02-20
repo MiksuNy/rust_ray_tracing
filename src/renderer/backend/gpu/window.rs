@@ -46,7 +46,7 @@ impl AppState {
 
         let surface = state.instance.create_surface(window.clone()).unwrap();
         let cap = surface.get_capabilities(&state.adapter);
-        let surface_format = cap.formats[0];
+        let surface_format = cap.formats[0].remove_srgb_suffix();
 
         let shader_module = state
             .device
@@ -194,7 +194,7 @@ impl AppState {
     }
 
     fn render(&mut self) {
-        let state = self.state.as_ref().unwrap();
+        let state = self.state.as_mut().unwrap();
 
         let surface_texture = self
             .surface
@@ -208,12 +208,7 @@ impl AppState {
                     ..Default::default()
                 });
 
-        let mut command_encoder = self
-            .state
-            .as_ref()
-            .unwrap()
-            .device
-            .create_command_encoder(&Default::default());
+        let mut command_encoder = state.device.create_command_encoder(&Default::default());
 
         // Ray tracing compute pass
         {
@@ -222,10 +217,11 @@ impl AppState {
                     label: None,
                     timestamp_writes: None,
                 });
-            compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
+            compute_pass.set_bind_group(0, &state.textures_bind_group, &[]);
             compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
             compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
             compute_pass.set_pipeline(&state.compute_pipeline);
+            compute_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
             compute_pass.dispatch_workgroups(
                 state.storage_texture.width() / 8,
                 state.storage_texture.height() / 8,
@@ -233,7 +229,12 @@ impl AppState {
             );
         }
 
-        // Copy the ray traced image to the output texture
+        command_encoder.copy_texture_to_texture(
+            state.storage_texture.as_image_copy(),
+            state.accumulation_texture.as_image_copy(),
+            state.storage_texture.size(),
+        );
+
         command_encoder.copy_texture_to_texture(
             state.storage_texture.as_image_copy(),
             self.texture.as_image_copy(),
@@ -263,11 +264,9 @@ impl AppState {
             render_pass.draw(0..3, 0..1);
         }
 
-        self.state
-            .as_ref()
-            .unwrap()
-            .queue
-            .submit([command_encoder.finish()]);
+        state.renderer_info.curr_sample += 1;
+
+        state.queue.submit([command_encoder.finish()]);
         self.window.pre_present_notify();
         surface_texture.present();
     }
@@ -303,14 +302,14 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        let app_state = self.app_state.as_mut().unwrap();
-        let state = app_state.state.as_ref().unwrap();
         match event {
             WindowEvent::CloseRequested => {
                 log_info!("Closing window");
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                let app_state = self.app_state.as_mut().unwrap();
+                let state = app_state.state.as_mut().unwrap();
                 let scene = self.scene.clone();
 
                 // Move cursor to the center of window if it's in focus
@@ -328,15 +327,29 @@ impl ApplicationHandler for App {
                 for physical_key in app_state.key_states.iter() {
                     match physical_key {
                         PhysicalKey::Code(KeyCode::KeyW) => {
-                            camera.position -= camera.forward * 0.05
+                            camera.position -= camera.forward * 0.03;
+                            state.renderer_info.curr_sample = 1;
                         }
                         PhysicalKey::Code(KeyCode::KeyS) => {
-                            camera.position += camera.forward * 0.05
+                            camera.position += camera.forward * 0.03;
+                            state.renderer_info.curr_sample = 1;
                         }
-                        PhysicalKey::Code(KeyCode::KeyA) => camera.position -= camera.right * 0.05,
-                        PhysicalKey::Code(KeyCode::KeyD) => camera.position += camera.right * 0.05,
-                        PhysicalKey::Code(KeyCode::Space) => camera.position += camera.up * 0.05,
-                        PhysicalKey::Code(KeyCode::KeyZ) => camera.position -= camera.up * 0.05,
+                        PhysicalKey::Code(KeyCode::KeyA) => {
+                            camera.position -= camera.right * 0.03;
+                            state.renderer_info.curr_sample = 1;
+                        }
+                        PhysicalKey::Code(KeyCode::KeyD) => {
+                            camera.position += camera.right * 0.03;
+                            state.renderer_info.curr_sample = 1;
+                        }
+                        PhysicalKey::Code(KeyCode::Space) => {
+                            camera.position += camera.up * 0.03;
+                            state.renderer_info.curr_sample = 1;
+                        }
+                        PhysicalKey::Code(KeyCode::KeyZ) => {
+                            camera.position -= camera.up * 0.03;
+                            state.renderer_info.curr_sample = 1;
+                        }
                         _ => (),
                     }
                 }
@@ -351,12 +364,8 @@ impl ApplicationHandler for App {
                     .camera_buffer
                     .set_buffer_data(&state.queue, &[new_camera_data]);
 
-                self.app_state.as_mut().unwrap().render();
-                self.app_state
-                    .as_ref()
-                    .unwrap()
-                    .get_window()
-                    .request_redraw();
+                app_state.render();
+                app_state.get_window().request_redraw();
             }
             WindowEvent::Resized(size) => {
                 self.app_state.as_mut().unwrap().resize(size);
@@ -371,12 +380,17 @@ impl ApplicationHandler for App {
         _device_id: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
-        let scene = self.scene.clone();
-        let key_states = &mut self.app_state.as_mut().unwrap().key_states;
-        let camera = &mut scene.borrow_mut().camera;
+        let app_state = self.app_state.as_mut().unwrap();
+        let key_states = &mut app_state.key_states;
 
         match event {
             DeviceEvent::MouseMotion { delta } => {
+                let scene = self.scene.clone();
+                let camera = &mut scene.borrow_mut().camera;
+                let state = app_state.state.as_mut().unwrap();
+
+                state.renderer_info.curr_sample = 1;
+
                 camera.yaw += delta.0 as f32 * 0.1;
                 camera.pitch += delta.1 as f32 * 0.1;
                 if camera.pitch >= 89.0 {

@@ -21,7 +21,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
             label: None,
             timestamp_writes: None,
         });
-        compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
+        compute_pass.set_bind_group(0, &state.textures_bind_group, &[]);
         compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
         compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
         compute_pass.set_pipeline(&state.compute_pipeline);
@@ -74,6 +74,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
 
     return output_data;
 }
+
 struct State {
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
@@ -83,8 +84,10 @@ struct State {
     storage_buffers: StorageBuffers,
     uniform_buffers: UniformBuffers,
     storage_texture: wgpu::Texture,
-    storage_texture_bind_group: wgpu::BindGroup,
+    accumulation_texture: wgpu::Texture,
+    textures_bind_group: wgpu::BindGroup,
     output_staging_buffer: wgpu::Buffer,
+    renderer_info: RendererInfo,
 }
 
 impl State {
@@ -93,7 +96,10 @@ impl State {
         let (device, queue) = Self::create_device_and_queue(&adapter);
 
         let storage_buffers = StorageBuffers::new(&device, scene);
-        let uniform_buffers = UniformBuffers::new(&device, scene, renderer);
+        let uniform_buffers = UniformBuffers::new(&device, scene);
+
+        let compute_shader_module =
+            device.create_shader_module(wgpu::include_wgsl!("./rt_compute.wgsl"));
 
         let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -111,6 +117,24 @@ impl State {
         });
         let storage_texture_view =
             storage_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let accumulation_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: renderer.options.output_image_dimensions.0 as u32,
+                height: renderer.options.output_image_dimensions.1 as u32,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let accumulation_texture_view =
+            accumulation_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: (renderer.options.output_image_dimensions.0
@@ -120,40 +144,55 @@ impl State {
             mapped_at_creation: false,
         });
 
-        let compute_shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("./rt_compute.wgsl"));
-
-        let storage_texture_bind_group_layout =
+        let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::ReadWrite,
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::ReadOnly,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                ],
             });
-        let storage_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &storage_texture_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&storage_texture_view),
-            }],
+            layout: &textures_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&storage_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&accumulation_texture_view),
+                },
+            ],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                &storage_texture_bind_group_layout,
+                &textures_bind_group_layout,
                 &storage_buffers.bind_group_layout,
                 &uniform_buffers.bind_group_layout,
             ],
-            immediate_size: 0,
+            immediate_size: 8,
         });
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -165,6 +204,11 @@ impl State {
             cache: None,
         });
 
+        let renderer_info = RendererInfo {
+            curr_sample: 1,
+            max_ray_depth: renderer.options.max_ray_depth as u32,
+        };
+
         return Self {
             instance,
             adapter,
@@ -174,8 +218,10 @@ impl State {
             storage_buffers,
             uniform_buffers,
             storage_texture,
-            storage_texture_bind_group,
+            accumulation_texture,
+            textures_bind_group,
             output_staging_buffer,
+            renderer_info,
         };
     }
 
@@ -209,11 +255,7 @@ impl State {
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: None,
             required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                | wgpu::Features::TIMESTAMP_QUERY
-                | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
-                | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
-                | wgpu::Features::TEXTURE_BINDING_ARRAY
-                | wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY,
+                | wgpu::Features::IMMEDIATES,
             required_limits: adapter.limits(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::Performance,
@@ -324,44 +366,31 @@ struct UniformBuffers {
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,
     camera_buffer: Buffer,
-    renderer_buffer: Buffer,
 }
 
 impl UniformBuffers {
-    fn new(device: &wgpu::Device, scene: &Scene, renderer: Renderer) -> Self {
+    fn new(device: &wgpu::Device, scene: &Scene) -> Self {
         let uniform_camera = UniformCamera {
             look_at: scene.camera.look_at,
             position: scene.camera.position,
             _pad: [0; 4],
         };
         let camera_buffer = Buffer::create_uniform_buffer(device, 0, &[uniform_camera]);
-        let uniform_renderer = UniformRenderer {
-            samples: renderer.options.samples as u32,
-            max_ray_depth: renderer.options.max_ray_depth as u32,
-        };
-        let renderer_buffer = Buffer::create_uniform_buffer(device, 1, &[uniform_renderer]);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            entries: &[
-                camera_buffer.bind_group_layout_entry,
-                renderer_buffer.bind_group_layout_entry,
-            ],
+            entries: &[camera_buffer.bind_group_layout_entry],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &bind_group_layout,
-            entries: &[
-                camera_buffer.bind_group_entry(),
-                renderer_buffer.bind_group_entry(),
-            ],
+            entries: &[camera_buffer.bind_group_entry()],
         });
 
         return Self {
             bind_group,
             bind_group_layout,
             camera_buffer,
-            renderer_buffer,
         };
     }
 }
@@ -385,8 +414,8 @@ impl From<Camera> for UniformCamera {
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-#[repr(C)]
-struct UniformRenderer {
-    samples: u32,
+#[repr(C, align(4))]
+struct RendererInfo {
+    curr_sample: u32,
     max_ray_depth: u32,
 }

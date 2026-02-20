@@ -1,5 +1,8 @@
 @group(0) @binding(0)
-var texture: texture_storage_2d<rgba8unorm, read_write>;
+var storage_texture: texture_storage_2d<rgba8unorm, write>;
+
+@group(0) @binding(1)
+var accumulation_texture: texture_storage_2d<rgba8unorm, read>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -19,8 +22,7 @@ var <storage, read> texture_info: array<TextureInfo>;
 @group(2) @binding(0)
 var <uniform> camera: Camera;
 
-@group(2) @binding(1)
-var <uniform> renderer_info: RendererInfo;
+var <immediate> renderer_info: RendererInfo;
 
 const PI = 3.1415926535f;
 const TWO_PI = 6.283185307f;
@@ -28,7 +30,7 @@ const PI_OVER_2 = 1.5707963268f;
 const PI_OVER_4 = 0.7853981634f;
 
 struct RendererInfo {
-    samples: u32,
+    current_sample: u32,
     max_ray_depth: u32,
 }
 
@@ -94,34 +96,31 @@ struct HitInfo {
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    var rng_seed = 22235u + (757283u * global_id.x + 872653746u * global_id.y);
+    var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
 
-    let texture_w = f32(textureDimensions(texture).x);
-    let texture_h = f32(textureDimensions(texture).y);
+    let texture_w = f32(textureDimensions(storage_texture).x);
+    let texture_h = f32(textureDimensions(storage_texture).y);
     let aspect = texture_w / texture_h;
     let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
     let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
 
-    // TODO: This breaks silently at high sample counts.
-    // The loop should probably be done on the CPU and on the GPU we just read from a texture containing the previous sample's pixel data.
-    var final_color = vec3<f32>(0.0);
-    for (var i = 0u; i < renderer_info.samples; i++) {
-        var ray = Ray();
-        ray.origin = camera.position;
-        let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
-        ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
-        final_color += trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    }
-    final_color /= f32(renderer_info.samples);
-    final_color = linear_to_srgb(final_color);
-    final_color = aces_filmic(final_color);
+    var ray = Ray();
+    ray.origin = camera.position;
+    let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
+    ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
+
+    let tex_coords = vec2<u32>(global_id.xy);
+
+    let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
+    let accumulation_color = textureLoad(accumulation_texture, tex_coords).rgb;
+    let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
+
+    textureStore(storage_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 
     //var ray = Ray();
     //ray.origin = camera.position;
     //ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
     //let final_color = debug_bvh(ray, 300.0f);
-
-    textureStore(texture, vec2<i32>(i32(global_id.x), i32(global_id.y)), vec4<f32>(final_color, 1.0));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
@@ -195,7 +194,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             curr_ray_depth += 1u;
 
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
-            let sky_strength = vec3<f32>(0.1f);
+            let sky_strength = vec3<f32>(0.0f);
 
             ray_color *= sky_color;
             emitted_light += sky_strength;
@@ -441,24 +440,6 @@ fn xor_shift(input: ptr<function, u32>) -> u32 {
 
 fn rand_f32(input: ptr<function, u32>) -> f32 {
     return f32(xor_shift(input)) / f32(0xFFFFFFFF);
-}
-
-// https://gamedev.stackexchange.com/a/194038
-fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
-    let cutoff = vec3<f32>(f32(linear.r < 0.0031308f), f32(linear.g < 0.0031308f), f32(linear.b < 0.0031308f));
-    let higher = vec3<f32>(1.055) * pow(linear, vec3<f32>(1.0/2.4)) - vec3<f32>(0.055);
-    let lower = linear * vec3<f32>(12.92);
-    return mix(higher, lower, cutoff);
-}
-
-// https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-fn aces_filmic(x: vec3<f32>) -> vec3<f32> {
-    let a = 2.51f;
-    let b = 0.03f;
-    let c = 2.43f;
-    let d = 0.59f;
-    let e = 0.14f;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0f), vec3<f32>(1.0f));
 }
 
 fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
