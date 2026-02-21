@@ -124,7 +124,7 @@ impl Triangle {
         );
     }
 
-    pub fn bounds(&self) -> (Vec3f, Vec3f) {
+    pub fn bounds_mid(&self) -> Vec3f {
         let mut bounds_min = Vec3f::from(f32::MAX);
         let mut bounds_max = Vec3f::from(-f32::MAX);
 
@@ -135,7 +135,7 @@ impl Triangle {
             }
         }
 
-        return (bounds_min, bounds_max);
+        return (bounds_min + bounds_max) / 2.0;
     }
 }
 

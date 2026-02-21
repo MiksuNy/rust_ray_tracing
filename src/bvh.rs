@@ -60,7 +60,7 @@ impl BVH {
         let parent_cost = node.num_tris as f32 * node.surface_area();
 
         // Surface area heuristic
-        const NUM_BINS: usize = 8;
+        const NUM_BINS: usize = 16;
         let mut best_split_axis: usize = 0;
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
@@ -69,19 +69,18 @@ impl BVH {
             let mut centroid_bounds_max = f32::MIN;
             for i in 0..node.num_tris {
                 let tri = scene.tris[(node.first_tri_or_child + i) as usize];
-                let tri_bounds = tri.bounds();
-                let tri_bounds_center = (tri_bounds.0 + tri_bounds.1) / 2.0;
+                let tri_bounds_mid = tri.bounds_mid();
                 centroid_bounds_min =
-                    f32::min(centroid_bounds_min, tri_bounds_center.data[split_axis]);
+                    f32::min(centroid_bounds_min, tri_bounds_mid.data[split_axis]);
                 centroid_bounds_max =
-                    f32::max(centroid_bounds_max, tri_bounds_center.data[split_axis]);
+                    f32::max(centroid_bounds_max, tri_bounds_mid.data[split_axis]);
             }
             if centroid_bounds_min == centroid_bounds_max {
                 continue;
             }
 
             let scale = (centroid_bounds_max - centroid_bounds_min) / NUM_BINS as f32;
-            for i in 0..NUM_BINS {
+            for i in 1..NUM_BINS {
                 let split_pos = centroid_bounds_min + i as f32 * scale;
                 let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
                 if split_cost < best_split_cost {
@@ -103,7 +102,7 @@ impl BVH {
         let mut i: u32 = node.first_tri_or_child;
         let mut j: u32 = i + node.num_tris - 1;
         while i <= j {
-            if scene.tris[i as usize].mid().data[split_axis] < split_pos {
+            if scene.tris[i as usize].bounds_mid().data[split_axis] < split_pos {
                 i += 1;
             } else {
                 scene.tris.swap(i as usize, j as usize);
@@ -145,7 +144,7 @@ impl BVH {
 
         for i in 0..node.num_tris {
             let tri = &scene.tris[(node.first_tri_or_child + i) as usize];
-            if tri.mid().data[split_axis] < split_pos {
+            if tri.bounds_mid().data[split_axis] < split_pos {
                 left.grow_by_tri(tri);
                 left.num_tris += 1;
             } else {
