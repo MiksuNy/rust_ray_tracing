@@ -46,7 +46,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
                 buffer: &state.output_staging_buffer,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some((renderer.options.output_image_dimensions.0 * 4) as u32),
+                    bytes_per_row: Some((renderer.options.output_image_dimensions.0 * 8) as u32),
                     rows_per_image: Some(renderer.options.output_image_dimensions.1 as u32),
                 },
             },
@@ -126,7 +126,7 @@ impl State {
         let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: (renderer.options.output_image_dimensions.0
-                * 4
+                * 8
                 * renderer.options.output_image_dimensions.1) as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,

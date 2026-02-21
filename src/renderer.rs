@@ -77,7 +77,7 @@ impl Renderer {
                 bytes.as_slice(),
                 self.options.output_image_dimensions.0 as u32,
                 self.options.output_image_dimensions.1 as u32,
-                image::ColorType::Rgba8,
+                image::ColorType::Rgba16,
             );
 
             if image_result.is_err() {

@@ -374,6 +374,24 @@ impl ApplicationHandler for App {
                 app_state.render();
                 app_state.get_window().request_redraw();
             }
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                if event.state.is_pressed() {
+                    match event.physical_key {
+                        PhysicalKey::Code(KeyCode::KeyI) => {
+                            let scene = self.scene.clone();
+                            let camera = &scene.borrow().camera;
+                            log_info!("Camera position: {}", camera.position);
+                            log_info!("Camera pitch:    {}", camera.pitch);
+                            log_info!("Camera yaw:      {}", camera.yaw);
+                        }
+                        _ => (),
+                    }
+                }
+            }
             WindowEvent::Resized(size) => {
                 self.app_state.as_mut().unwrap().resize(size);
             }
