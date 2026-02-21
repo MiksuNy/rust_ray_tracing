@@ -5,6 +5,7 @@ struct VSOutput {
 
 @vertex
 fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> VSOutput {
+    // Fullscreen triangle
     let vertex_array = array(
         vec2<f32>(-1.0,  3.0),
         vec2<f32>( 3.0, -1.0),

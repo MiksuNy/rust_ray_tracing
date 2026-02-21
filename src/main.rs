@@ -14,16 +14,16 @@ mod scene;
 mod texture;
 mod vector;
 
-const WIDTH: usize = 640;
-const HEIGHT: usize = 480;
-const SAMPLE_COUNT: usize = 1;
+const WIDTH: usize = 1920;
+const HEIGHT: usize = 1080;
+const MAX_SAMPLE_COUNT: usize = 1;
 const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/erato.obj";
+const OBJ_PATH: &str = "../res/main_sponza/main_sponza_with_curtains.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
     let Some(renderer) = Renderer::new(RendererOptions {
-        samples: SAMPLE_COUNT,
+        max_samples: MAX_SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         output_image_dimensions: (WIDTH, HEIGHT),
         output_image_path: None,

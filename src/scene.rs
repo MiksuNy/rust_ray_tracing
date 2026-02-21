@@ -123,6 +123,20 @@ impl Triangle {
                 / 3.0,
         );
     }
+
+    pub fn bounds(&self) -> (Vec3f, Vec3f) {
+        let mut bounds_min = Vec3f::from(f32::MAX);
+        let mut bounds_max = Vec3f::from(-f32::MAX);
+
+        for vertex in self.vertices {
+            for i in 0..3 {
+                bounds_min.data[i] = f32::min(bounds_min.data[i], vertex.position.data[i]);
+                bounds_max.data[i] = f32::max(bounds_max.data[i], vertex.position.data[i]);
+            }
+        }
+
+        return (bounds_min, bounds_max);
+    }
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

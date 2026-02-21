@@ -69,8 +69,12 @@ impl BVH {
             let mut centroid_bounds_max = f32::MIN;
             for i in 0..node.num_tris {
                 let tri = scene.tris[(node.first_tri_or_child + i) as usize];
-                centroid_bounds_min = f32::min(centroid_bounds_min, tri.mid().data[split_axis]);
-                centroid_bounds_max = f32::max(centroid_bounds_max, tri.mid().data[split_axis]);
+                let tri_bounds = tri.bounds();
+                let tri_bounds_center = (tri_bounds.0 + tri_bounds.1) / 2.0;
+                centroid_bounds_min =
+                    f32::min(centroid_bounds_min, tri_bounds_center.data[split_axis]);
+                centroid_bounds_max =
+                    f32::max(centroid_bounds_max, tri_bounds_center.data[split_axis]);
             }
             if centroid_bounds_min == centroid_bounds_max {
                 continue;
@@ -183,12 +187,14 @@ impl Default for Node {
 
 impl Node {
     fn grow_by_tri(&mut self, tri: &Triangle) {
-        tri.vertices.iter().for_each(|vert| {
+        for vertex in tri.vertices {
             for i in 0..3 {
-                self.bounds_min.data[i] = f32::min(self.bounds_min.data[i], vert.position.data[i]);
-                self.bounds_max.data[i] = f32::max(self.bounds_max.data[i], vert.position.data[i]);
+                self.bounds_min.data[i] =
+                    f32::min(self.bounds_min.data[i], vertex.position.data[i]);
+                self.bounds_max.data[i] =
+                    f32::max(self.bounds_max.data[i], vertex.position.data[i]);
             }
-        });
+        }
     }
 
     fn extent(&self) -> Vec3f {

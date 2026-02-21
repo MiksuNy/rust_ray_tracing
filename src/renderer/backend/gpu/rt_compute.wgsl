@@ -1,5 +1,5 @@
 @group(0) @binding(0)
-var storage_texture: texture_storage_2d<rgba8unorm, read_write>;
+var storage_texture: texture_storage_2d<rgba16unorm, read_write>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -94,6 +94,7 @@ struct HitInfo {
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
+    let tex_coords = vec2<u32>(global_id.xy);
 
     let texture_w = f32(textureDimensions(storage_texture).x);
     let texture_h = f32(textureDimensions(storage_texture).y);
@@ -106,18 +107,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
     ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
 
-    let tex_coords = vec2<u32>(global_id.xy);
-
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
     let accumulation_color = textureLoad(storage_texture, tex_coords).rgb;
     let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
-    textureStore(storage_texture, tex_coords, vec4<f32>(final_color, 1.0f));
-
-    //var ray = Ray();
-    //ray.origin = camera.position;
-    //ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x, screen_y, 1.0, 0.0)).xyz;
     //let final_color = debug_bvh(ray, 300.0f);
+
+    textureStore(storage_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
@@ -166,6 +162,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                 ray_color *= hit_material.base_color;
 
                 new_dir = lambertian_dir;
+
                 if hit_material.transmission > rand_f32(rng_seed) {
                     new_dir = refracted_dir;
                     if dot(new_dir, hit_info.normal) > 0.0f {
@@ -191,7 +188,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             curr_ray_depth += 1u;
 
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
-            let sky_strength = vec3<f32>(0.0f);
+            let sky_strength = vec3<f32>(5.0f);
 
             ray_color *= sky_color;
             emitted_light += sky_strength;
@@ -286,14 +283,14 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     return hit_info;
 }
 
-fn intersect_node(ray: Ray, node: Node) -> f32 {
+fn intersect_node(ray: Ray, node: Node, max_distance: f32) -> f32 {
     let t_min = (node.bounds_min - ray.origin) / ray.direction;
     let t_max = (node.bounds_max - ray.origin) / ray.direction;
     let t_1 = min(t_min, t_max);
     let t_2 = max(t_min, t_max);
     let t_near = max(max(t_1.x, t_1.y), t_1.z);
     let t_far = min(min(t_2.x, t_2.y), t_2.z);
-    return select(1e30f, t_near, t_near <= t_far && t_far > 0.0f);
+    return select(1e30f, t_near, t_near <= t_far && t_near < max_distance && t_far > 0.0f);
 }
 
 fn traverse_bvh(ray: Ray) -> HitInfo {
@@ -320,10 +317,12 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
             }
             continue;
         }
+
         var child_1 = bvh_nodes[node.first_tri_or_child];
         var child_2 = bvh_nodes[node.first_tri_or_child + 1u];
-        var dist_1 = intersect_node(ray, child_1);
-        var dist_2 = intersect_node(ray, child_2);
+        var dist_1 = intersect_node(ray, child_1, hit_info.distance);
+        var dist_2 = intersect_node(ray, child_2, hit_info.distance);
+
         if dist_1 > dist_2 {
             let temp_dist = dist_1;
             dist_1 = dist_2;
@@ -333,6 +332,7 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
             child_1 = child_2;
             child_2 = temp_child;
         }
+
         if dist_1 == 1e30f {
             if stack_ptr == 0u {
                 break;
@@ -372,10 +372,12 @@ fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
             }
             continue;
         }
+
         var child_1 = bvh_nodes[node.first_tri_or_child];
         var child_2 = bvh_nodes[node.first_tri_or_child + 1u];
-        var dist_1 = intersect_node(ray, child_1);
-        var dist_2 = intersect_node(ray, child_2);
+        var dist_1 = intersect_node(ray, child_1, 1e30f);
+        var dist_2 = intersect_node(ray, child_2, 1e30f);
+
         if dist_1 > dist_2 {
             let temp_dist = dist_1;
             dist_1 = dist_2;
@@ -385,6 +387,7 @@ fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
             child_1 = child_2;
             child_2 = temp_child;
         }
+
         if dist_1 == 1e30f {
             if stack_ptr == 0u {
                 break;

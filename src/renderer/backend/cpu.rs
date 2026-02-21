@@ -32,7 +32,7 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
                 (((x as f32 / width as f32) * 2.0) - 1.0) * (width as f32 / height as f32);
             let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
-            for _ in 0..renderer.options.samples {
+            for _ in 0..renderer.options.max_samples {
                 let jitter = Vec3f::new(
                     Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
                     Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
@@ -55,7 +55,7 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
                 );
             }
 
-            final_color /= renderer.options.samples as f32;
+            final_color /= renderer.options.max_samples as f32;
             final_color = Vec3f::linear_to_gamma(final_color);
 
             let rgb: [u8; 3] = final_color.into();

@@ -11,50 +11,56 @@ pub mod window;
 use buffer::Buffer;
 
 pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8> {
-    let state = State::new(renderer, scene);
+    let mut state = State::new(renderer, scene);
 
-    let mut command_encoder = state
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    {
-        let mut compute_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: None,
-            timestamp_writes: None,
-        });
-        compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
-        compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
-        compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
-        compute_pass.set_pipeline(&state.compute_pipeline);
-        compute_pass.dispatch_workgroups(
-            (renderer.options.output_image_dimensions.0 / 8) as u32,
-            (renderer.options.output_image_dimensions.1 / 8) as u32,
-            1,
-        );
-    }
+    for _ in 0..renderer.options.max_samples {
+        let mut command_encoder = state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut compute_pass =
+                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: None,
+                    timestamp_writes: None,
+                });
+            compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
+            compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
+            compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
+            compute_pass.set_pipeline(&state.compute_pipeline);
+            compute_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
+            compute_pass.dispatch_workgroups(
+                (renderer.options.output_image_dimensions.0 / 8) as u32,
+                (renderer.options.output_image_dimensions.1 / 8) as u32,
+                1,
+            );
+        }
 
-    command_encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: &state.storage_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &state.output_staging_buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some((renderer.options.output_image_dimensions.0 * 4) as u32),
-                rows_per_image: Some(renderer.options.output_image_dimensions.1 as u32),
+        command_encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &state.storage_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
-        },
-        wgpu::Extent3d {
-            width: renderer.options.output_image_dimensions.0 as u32,
-            height: renderer.options.output_image_dimensions.1 as u32,
-            depth_or_array_layers: 1,
-        },
-    );
+            wgpu::TexelCopyBufferInfo {
+                buffer: &state.output_staging_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some((renderer.options.output_image_dimensions.0 * 4) as u32),
+                    rows_per_image: Some(renderer.options.output_image_dimensions.1 as u32),
+                },
+            },
+            wgpu::Extent3d {
+                width: renderer.options.output_image_dimensions.0 as u32,
+                height: renderer.options.output_image_dimensions.1 as u32,
+                depth_or_array_layers: 1,
+            },
+        );
 
-    state.queue.submit(Some(command_encoder.finish()));
+        state.renderer_info.curr_sample += 1;
+
+        state.queue.submit(Some(command_encoder.finish()));
+    }
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = state.output_staging_buffer.slice(..);
@@ -98,7 +104,7 @@ impl State {
         let uniform_buffers = UniformBuffers::new(&device, scene);
 
         let compute_shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("./rt_compute.wgsl"));
+            device.create_shader_module(wgpu::include_wgsl!("./gpu/rt_compute.wgsl"));
 
         let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -110,7 +116,7 @@ impl State {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Unorm,
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
@@ -134,7 +140,7 @@ impl State {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::ReadWrite,
-                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        format: wgpu::TextureFormat::Rgba16Unorm,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -218,7 +224,8 @@ impl State {
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: None,
             required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                | wgpu::Features::IMMEDIATES,
+                | wgpu::Features::IMMEDIATES
+                | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
             required_limits: adapter.limits(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::Performance,

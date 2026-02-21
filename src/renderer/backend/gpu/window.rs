@@ -46,7 +46,14 @@ impl AppState {
 
         let surface = state.instance.create_surface(window.clone()).unwrap();
         let cap = surface.get_capabilities(&state.adapter);
-        let surface_format = cap.formats[0].remove_srgb_suffix();
+
+        let surface_format: wgpu::TextureFormat;
+        if cap.formats.contains(&wgpu::TextureFormat::Rgb10a2Unorm) {
+            surface_format = wgpu::TextureFormat::Rgb10a2Unorm;
+        } else {
+            surface_format = cap.formats[0].remove_srgb_suffix();
+        }
+        log_info!("Using surface texture format: {:?}", surface_format);
 
         let shader_module = state
             .device
@@ -83,7 +90,7 @@ impl AppState {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: wgpu::TextureFormat::Rgba16Unorm,
             usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
@@ -315,6 +322,12 @@ impl ApplicationHandler for App {
                         window_size.height / 2,
                     ));
                 }
+
+                let title = format!(
+                    "Path tracer | Current sample: {}",
+                    state.renderer_info.curr_sample
+                );
+                window.set_title(&title);
 
                 let camera = &mut scene.borrow_mut().camera;
 
