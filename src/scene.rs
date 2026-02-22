@@ -107,23 +107,6 @@ impl Triangle {
         };
     }
 
-    pub fn mid(&self) -> Vec3f {
-        return Vec3f::new(
-            (self.vertices[0].position.x()
-                + self.vertices[1].position.x()
-                + self.vertices[2].position.x())
-                / 3.0,
-            (self.vertices[0].position.y()
-                + self.vertices[1].position.y()
-                + self.vertices[2].position.y())
-                / 3.0,
-            (self.vertices[0].position.z()
-                + self.vertices[1].position.z()
-                + self.vertices[2].position.z())
-                / 3.0,
-        );
-    }
-
     pub fn bounds_mid(&self) -> Vec3f {
         let mut bounds_min = Vec3f::from(f32::MAX);
         let mut bounds_max = Vec3f::from(-f32::MAX);
