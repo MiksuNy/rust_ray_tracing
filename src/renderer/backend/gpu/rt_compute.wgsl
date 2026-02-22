@@ -188,7 +188,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             curr_ray_depth += 1u;
 
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
-            let sky_strength = vec3<f32>(0.0f);
+            let sky_strength = vec3<f32>(1.0f);
 
             ray_color *= sky_color;
             emitted_light += sky_strength;
