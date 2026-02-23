@@ -3,6 +3,7 @@
 Features
 --------
 - GPU rendering backend with [wgpu](https://crates.io/crates/wgpu)
+    - Realtime mode with [winit](https://crates.io/crates/winit)
 - CPU rendering backend, multithreaded with [rayon](https://crates.io/crates/rayon)
     - NOTE: The GPU backend is more feature complete for now
 - Custom OBJ loader (only triangulated models) + MTL with some PBR features
@@ -13,23 +14,22 @@ Features
 
 Todo (in order of priority)
 --------
-- Realtime mode with movable camera
 - Proper BSDF system for materials
-- Bring CPU backend to feature parity with GPU backend
 - Scenes
     - glTF support
 - Better BVH
+- Bring CPU backend to feature parity with GPU backend
 - Command line arguments for scenes and other parameters
 --------
 
 Gallery
 --------
-![](cornell_box.png)
+Models from https://benedikt-bitterli.me/resources/
+![](car_with_red_blue_lights.png)
+![](dragon_orange_translucent.png)
 --------
-The following dragon model is from https://benedikt-bitterli.me/resources/
-![](dragon.png)
-![](dragon_translucent.png)
-![](dragon_debug.png)
+Sponza model from https://www.intel.com/content/www/us/en/developer/topic-technology/graphics-research/samples.html
+![](intel_sponza_curtains.png)
 --------
 Chinese dragon model downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data)
 ![](chinese_dragon.png)
