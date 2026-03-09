@@ -119,7 +119,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
     var ray_color = vec3<f32>(1.0f);
     var incoming_light = vec3<f32>(0.0f);
-    var emitted_light = vec3<f32>(0.0f);
 
     var curr_ray_depth: u32 = 0u;
     while curr_ray_depth < max_ray_depth {
@@ -180,19 +179,28 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                 }
             }
 
-            emitted_light += hit_material.emission;
-            incoming_light += emitted_light * ray_color;
+            // Russian roulette
+            var rr_probability = 1.0f;
+            if curr_ray_depth >= 2 {
+                rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
+                if rr_probability < rand_f32(rng_seed) {
+                    break;
+                }
+            }
+            ray_color /= rr_probability;
+
+            incoming_light += hit_material.emission * ray_color;
+
             (*ray).origin = hit_info.point + new_dir * 0.0001f;
             (*ray).direction = new_dir;
         } else {
             curr_ray_depth += 1u;
 
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
-            let sky_strength = vec3<f32>(1.0f);
+            let sky_strength = vec3<f32>(5.0f);
 
             ray_color *= sky_color;
-            emitted_light += sky_strength;
-            incoming_light += emitted_light * ray_color;
+            incoming_light += sky_strength * ray_color;
 
             break;
         }

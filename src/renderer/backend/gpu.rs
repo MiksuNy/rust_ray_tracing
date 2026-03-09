@@ -17,18 +17,35 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         let mut command_encoder = state
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        // Ray tracing compute pass
         {
-            let mut compute_pass =
-                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: None,
-                    timestamp_writes: None,
-                });
-            compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
-            compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
-            compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
-            compute_pass.set_pipeline(&state.compute_pipeline);
-            compute_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
-            compute_pass.dispatch_workgroups(
+            let mut rt_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
+            rt_pass.set_bind_group(0, &state.rt_texture_bind_group, &[]);
+            rt_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
+            rt_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
+            rt_pass.set_pipeline(&state.rt_pipeline);
+            rt_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
+            rt_pass.dispatch_workgroups(
+                (renderer.options.output_image_dimensions.0 / 8) as u32,
+                (renderer.options.output_image_dimensions.1 / 8) as u32,
+                1,
+            );
+        }
+
+        // Post process compute pass
+        {
+            let mut pp_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
+            pp_pass.set_bind_group(0, &state.rt_texture_bind_group, &[]);
+            pp_pass.set_bind_group(1, &state.pp_texture_bind_group, &[]);
+            pp_pass.set_pipeline(&state.pp_pipeline);
+            pp_pass.dispatch_workgroups(
                 (renderer.options.output_image_dimensions.0 / 8) as u32,
                 (renderer.options.output_image_dimensions.1 / 8) as u32,
                 1,
@@ -37,7 +54,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
 
         command_encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &state.storage_texture,
+                texture: &state.pp_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -86,11 +103,14 @@ struct State {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    compute_pipeline: wgpu::ComputePipeline,
+    rt_pipeline: wgpu::ComputePipeline,
+    pp_pipeline: wgpu::ComputePipeline,
     storage_buffers: StorageBuffers,
     uniform_buffers: UniformBuffers,
-    storage_texture: wgpu::Texture,
-    storage_texture_bind_group: wgpu::BindGroup,
+    rt_texture: wgpu::Texture,
+    rt_texture_bind_group: wgpu::BindGroup,
+    pp_texture: wgpu::Texture,
+    pp_texture_bind_group: wgpu::BindGroup,
     output_staging_buffer: wgpu::Buffer,
     renderer_info: RendererInfo,
 }
@@ -103,11 +123,17 @@ impl State {
         let storage_buffers = StorageBuffers::new(&device, scene);
         let uniform_buffers = UniformBuffers::new(&device, scene);
 
-        let compute_shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("./gpu/rt_compute.wgsl"));
-
-        let storage_texture = device.create_texture(&wgpu::TextureDescriptor {
+        let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
+            size: (renderer.options.output_image_dimensions.0
+                * 8
+                * renderer.options.output_image_dimensions.1) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let rt_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("rt_texture"),
             size: wgpu::Extent3d {
                 width: renderer.options.output_image_dimensions.0 as u32,
                 height: renderer.options.output_image_dimensions.1 as u32,
@@ -120,21 +146,11 @@ impl State {
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        let storage_texture_view =
-            storage_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let rt_texture_view = rt_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: (renderer.options.output_image_dimensions.0
-                * 8
-                * renderer.options.output_image_dimensions.1) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let storage_texture_bind_group_layout =
+        let rt_texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some("rt_texture_bind_group_layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -146,29 +162,89 @@ impl State {
                     count: None,
                 }],
             });
-        let storage_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &storage_texture_bind_group_layout,
+        let rt_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("rt_texture_bind_group"),
+            layout: &rt_texture_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(&storage_texture_view),
+                resource: wgpu::BindingResource::TextureView(&rt_texture_view),
             }],
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
+        let rt_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("rt_pipeline_layout"),
             bind_group_layouts: &[
-                &storage_texture_bind_group_layout,
+                &rt_texture_bind_group_layout,
                 &storage_buffers.bind_group_layout,
                 &uniform_buffers.bind_group_layout,
             ],
             immediate_size: 8,
         });
 
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            module: &compute_shader_module,
+        let rt_shader_module =
+            device.create_shader_module(wgpu::include_wgsl!("./gpu/rt_compute.wgsl"));
+
+        let rt_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("rt_pipeline"),
+            layout: Some(&rt_pipeline_layout),
+            module: &rt_shader_module,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let pp_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("pp_texture"),
+            size: wgpu::Extent3d {
+                width: renderer.options.output_image_dimensions.0 as u32,
+                height: renderer.options.output_image_dimensions.1 as u32,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let pp_texture_view = pp_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let pp_texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("pp_texture_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba16Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                }],
+            });
+        let pp_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pp_texture_bind_group"),
+            layout: &pp_texture_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&pp_texture_view),
+            }],
+        });
+
+        let pp_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pp_pipeline_layout"),
+            bind_group_layouts: &[&rt_texture_bind_group_layout, &pp_texture_bind_group_layout],
+            immediate_size: 0,
+        });
+
+        let pp_shader_module =
+            device.create_shader_module(wgpu::include_wgsl!("./gpu/pp_compute.wgsl"));
+
+        let pp_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("pp_pipeline"),
+            layout: Some(&pp_pipeline_layout),
+            module: &pp_shader_module,
             entry_point: Some("main"),
             compilation_options: Default::default(),
             cache: None,
@@ -184,11 +260,14 @@ impl State {
             adapter,
             device,
             queue,
-            compute_pipeline,
+            rt_pipeline,
+            pp_pipeline,
             storage_buffers,
             uniform_buffers,
-            storage_texture,
-            storage_texture_bind_group,
+            rt_texture,
+            rt_texture_bind_group,
+            pp_texture,
+            pp_texture_bind_group,
             output_staging_buffer,
             renderer_info,
         };

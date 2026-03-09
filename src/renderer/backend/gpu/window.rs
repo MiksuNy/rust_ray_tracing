@@ -86,7 +86,7 @@ impl AppState {
 
         let texture = state.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
-            size: state.storage_texture.size(),
+            size: state.rt_texture.size(),
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -219,27 +219,42 @@ impl AppState {
 
         // Ray tracing compute pass
         {
-            let mut compute_pass =
-                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: None,
-                    timestamp_writes: None,
-                });
-            compute_pass.set_bind_group(0, &state.storage_texture_bind_group, &[]);
-            compute_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
-            compute_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
-            compute_pass.set_pipeline(&state.compute_pipeline);
-            compute_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
-            compute_pass.dispatch_workgroups(
-                state.storage_texture.width() / 8,
-                state.storage_texture.height() / 8,
+            let mut rt_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
+            rt_pass.set_bind_group(0, &state.rt_texture_bind_group, &[]);
+            rt_pass.set_bind_group(1, &state.storage_buffers.bind_group, &[]);
+            rt_pass.set_bind_group(2, &state.uniform_buffers.bind_group, &[]);
+            rt_pass.set_pipeline(&state.rt_pipeline);
+            rt_pass.set_immediates(0, bytemuck::cast_slice(&[state.renderer_info]));
+            rt_pass.dispatch_workgroups(
+                state.rt_texture.width() / 8,
+                state.rt_texture.height() / 8,
+                1,
+            );
+        }
+
+        // Post process compute pass
+        {
+            let mut pp_pass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                timestamp_writes: None,
+            });
+            pp_pass.set_bind_group(0, &state.rt_texture_bind_group, &[]);
+            pp_pass.set_bind_group(1, &state.pp_texture_bind_group, &[]);
+            pp_pass.set_pipeline(&state.pp_pipeline);
+            pp_pass.dispatch_workgroups(
+                state.rt_texture.width() / 8,
+                state.rt_texture.height() / 8,
                 1,
             );
         }
 
         command_encoder.copy_texture_to_texture(
-            state.storage_texture.as_image_copy(),
+            state.pp_texture.as_image_copy(),
             self.texture.as_image_copy(),
-            state.storage_texture.size(),
+            state.pp_texture.size(),
         );
 
         // Finally render the copied texture to the screen

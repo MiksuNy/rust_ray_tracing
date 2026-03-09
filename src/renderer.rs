@@ -24,14 +24,6 @@ impl Renderer {
             log_error!("Max sample count must be greater than 0");
             return None;
         }
-        if options.max_samples != 1 && options.is_realtime {
-            log_error!("Max sample count must be 1 if realtime mode is enabled");
-            return None;
-        }
-        if options.output_image_path.is_some() && options.is_realtime {
-            log_error!("Output image path must be None if realtime mode is enabled");
-            return None;
-        }
         if options.output_image_path.is_none() && !options.is_realtime {
             log_error!("Output image path must be Some if realtime mode is disabled");
             return None;
