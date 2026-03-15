@@ -16,9 +16,9 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const MAX_SAMPLE_COUNT: usize = 1;
-const MAX_BOUNCES: usize = 6;
-const OBJ_PATH: &str = "../res/main_sponza/main_sponza_with_curtains.obj";
+const MAX_SAMPLE_COUNT: usize = 100;
+const MAX_BOUNCES: usize = 64;
+const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
         max_samples: MAX_SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         output_image_dimensions: (WIDTH, HEIGHT),
-        output_image_path: None,
+        output_image_path: Some(IMAGE_PATH),
         backend: RendererBackend::GPU,
         is_realtime: true,
     }) else {
@@ -38,9 +38,9 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = Vec3f::new(0.0, 0.0, 5.0);
-    camera.pitch = 0.0;
-    camera.yaw = 90.0;
+    camera.position = Vec3f::new(10.120248, 2.112871, -0.013121704);
+    camera.pitch = 2.8992846;
+    camera.yaw = 0.20016655;
     scene.set_camera(camera);
 
     renderer.render(Rc::new(RefCell::new(scene)));

@@ -91,6 +91,12 @@ struct HitInfo {
     front_face: bool,
 }
 
+struct BSDFType {
+    specular: bool,
+    transmitted: bool,
+    diffuse: bool
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
@@ -120,6 +126,9 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
     var ray_color = vec3<f32>(1.0f);
     var incoming_light = vec3<f32>(0.0f);
 
+    var prev_hit_point = ray.origin;
+    var transmitted_distance = 0.0f;
+
     var curr_ray_depth: u32 = 0u;
     while curr_ray_depth < max_ray_depth {
         let hit_info = traverse_bvh(*ray);
@@ -128,6 +137,12 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             curr_ray_depth += 1u;
 
             let hit_material = get_material(hit_info, materials[hit_info.material_id]);
+            var transmitted_distance = hit_info.distance;
+            if hit_info.front_face {
+                prev_hit_point = hit_info.point;
+            } else {
+                transmitted_distance = distance(hit_info.point, prev_hit_point);
+            }
 
             // TODO: Add transparency as a material property
             if hit_material.transparency_tex_id != 0xFFFFFFFF {
@@ -151,25 +166,33 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             let fresnel = schlick_fresnel(dot(sampled_normal, -(*ray).direction), f0);
 
             let specular_dir = normalize(reflect((*ray).direction, sampled_normal));
-            let lambertian_dir = normalize(to_world(tbn, cosine_sample_hemisphere(rng_seed)));
-            let refracted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
+            let transmitted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
+            let diffuse_dir = normalize(to_world(tbn, cosine_sample_hemisphere(rng_seed)));
 
-            let is_metallic = hit_material.metallic > rand_f32(rng_seed);
+            let bsdf_type = select_bsdf(hit_material, rng_seed);
 
             var new_dir: vec3<f32>;
-            if length(fresnel) < rand_f32(rng_seed) && !is_metallic {
+            if length(fresnel) < rand_f32(rng_seed) && !bsdf_type.specular {
                 ray_color *= hit_material.base_color;
-
-                new_dir = lambertian_dir;
-
-                if hit_material.transmission > rand_f32(rng_seed) {
-                    new_dir = refracted_dir;
+                if bsdf_type.transmitted {
+                    new_dir = transmitted_dir;
                     if dot(new_dir, hit_info.normal) > 0.0f {
                         break;
                     }
+                    var absorption = vec3<f32>(1.0f);
+                    if !hit_info.front_face {
+                        absorption = vec3<f32>(
+                            exp(-(1.0f - hit_material.base_color.r) * transmitted_distance),
+                            exp(-(1.0f - hit_material.base_color.g) * transmitted_distance),
+                            exp(-(1.0f - hit_material.base_color.b) * transmitted_distance),
+                        );
+                    }
+                    ray_color *= absorption;
+                } else {
+                    new_dir = diffuse_dir;
                 }
             } else {
-                if is_metallic {
+                if bsdf_type.specular {
                     ray_color *= fresnel;
                 }
 
@@ -181,7 +204,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             // Russian roulette
             var rr_probability = 1.0f;
-            if curr_ray_depth >= 2 {
+            if curr_ray_depth >= 12 {
                 rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
                 if rr_probability < rand_f32(rng_seed) {
                     break;
@@ -197,7 +220,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             curr_ray_depth += 1u;
 
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
-            let sky_strength = vec3<f32>(5.0f);
+            let sky_strength = vec3<f32>(1.0f);
 
             ray_color *= sky_color;
             incoming_light += sky_strength * ray_color;
@@ -207,6 +230,110 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
     }
 
     return incoming_light / f32(curr_ray_depth);
+}
+
+// https://www.pbr-book.org/3ed-2018/Reflection_Models#fragment-BSDFInlineFunctions-0
+fn cos_theta(w: vec3<f32>) -> f32 {
+    return w.z;
+}
+
+fn cos_2_theta(w: vec3<f32>) -> f32 {
+    return w.z * w.z;
+}
+
+fn abs_cos_theta(w: vec3<f32>) -> f32 {
+    return abs(w.z);
+}
+
+fn sin_2_theta(w: vec3<f32>) -> f32 {
+    return max(0.0f, 1.0f - cos_2_theta(w));
+}
+
+fn sin_theta(w: vec3<f32>) -> f32 {
+    return sqrt(sin_2_theta(w));
+}
+
+fn tan_theta(w: vec3<f32>) -> f32 {
+    return sin_theta(w) / cos_theta(w);
+}
+
+fn tan_2_theta(w: vec3<f32>) -> f32 {
+    return sin_2_theta(w) / cos_2_theta(w);
+}
+
+fn cos_phi(w: vec3<f32>) -> f32 {
+    let sin_theta = sin_theta(w);
+    if sin_theta == 0.0f {
+        return 1.0f;
+    } else {
+        return clamp(w.x / sin_theta, -1.0f, 1.0f);
+    }
+}
+
+fn sin_phi(w: vec3<f32>) -> f32 {
+    let sin_theta = sin_theta(w);
+    if sin_theta == 0.0f {
+        return 0.0f;
+    } else {
+        return clamp(w.y / sin_theta, -1.0f, 1.0f);
+    }
+}
+
+fn cos_2_phi(w: vec3<f32>) -> f32 {
+    return cos_phi(w) * cos_phi(w);
+}
+
+fn sin_2_phi(w: vec3<f32>) -> f32 {
+    return sin_phi(w) * sin_phi(w);
+}
+
+fn cos_d_phi(wa: vec3<f32>, wb: vec3<f32>) -> f32 {
+    return clamp(
+        (wa.x * wb.x + wa.y * wb.y) / sqrt((wa.x * wa.x + wa.y * wa.y) * (wb.x * wb.x + wb.y * wb.y)),
+        -1.0f,
+        1.0f
+    );
+}
+
+fn beckmann_d(wh: vec3<f32>, ax: f32, ay: f32) -> f32 {
+    let tan_2_theta = tan_2_theta(wh);
+    if tan_2_theta >= 1e30f {
+        return 0.0f;
+    }
+    let cos_4_theta = cos_2_theta(wh) * cos_2_theta(wh);
+    return exp(-tan_2_theta * (cos_2_phi(wh) / (ax * ax) + sin_2_phi(wh) / (ay * ay))) / (PI * ax * ay * cos_4_theta);
+}
+
+fn beckmann_lamba(w: vec3<f32>, ax: f32, ay: f32) -> f32 {
+    let abs_tan_theta = abs(tan_theta(w));
+    if abs_tan_theta >= 1e30f {
+        return 0.0f;
+    }
+    let alpha = sqrt(cos_2_phi(w) * ax * ax + sin_2_phi(w) * ay * ay);
+    let a = 1.0f / (alpha * abs_tan_theta);
+    if a >= 1.6f {
+        return 0.0f;
+    }
+    return (1.0f - 1.259f * a + 0.396f * a * a) / (3.535f * a + 2.181f * a * a);
+}
+
+fn select_bsdf(material: Material, rng_seed: ptr<function, u32>) -> BSDFType {
+    var bsdf_type = BSDFType();
+
+    let specular_chance = material.metallic;
+    let transmission_chance = material.transmission;
+    let diffuse_chance = 1.0f - specular_chance - transmission_chance;
+
+    let r = rand_f32(rng_seed);
+    if specular_chance > r {
+        bsdf_type.specular = true;
+    } else if specular_chance + transmission_chance > r {
+        bsdf_type.transmitted = true;
+    } else {
+        bsdf_type.diffuse = true;
+    }
+
+    return bsdf_type;
 }
 
 // Helper function to get actual material properties of the hit surface

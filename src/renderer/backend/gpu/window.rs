@@ -245,8 +245,8 @@ impl AppState {
             pp_pass.set_bind_group(1, &state.pp_texture_bind_group, &[]);
             pp_pass.set_pipeline(&state.pp_pipeline);
             pp_pass.dispatch_workgroups(
-                state.rt_texture.width() / 8,
-                state.rt_texture.height() / 8,
+                state.pp_texture.width() / 8,
+                state.pp_texture.height() / 8,
                 1,
             );
         }
