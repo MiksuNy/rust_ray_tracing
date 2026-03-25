@@ -172,6 +172,9 @@ impl OBJ {
                         "Tf" => {
                             material.transmission = attribute.next().unwrap().parse().unwrap();
                         }
+                        "d" => {
+                            material.transparency = attribute.next().unwrap().parse().unwrap();
+                        }
                         "map_Kd" => {
                             let texture_path = attribute.next().unwrap();
                             Self::load_texture(

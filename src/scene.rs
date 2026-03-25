@@ -134,11 +134,13 @@ pub struct Material {
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
+    pub transparency: f32,
     pub base_color_tex_id: u32,
     pub emission_tex_id: u32,
     pub transparency_tex_id: u32,
     pub roughness_tex_id: u32,
     pub metallic_tex_id: u32,
+    _pad3: [u8; 12],
 }
 
 impl Default for Material {
@@ -153,11 +155,13 @@ impl Default for Material {
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
+            transparency: 1.0,
             base_color_tex_id: u32::MAX,
             emission_tex_id: u32::MAX,
             transparency_tex_id: u32::MAX,
             roughness_tex_id: u32::MAX,
             metallic_tex_id: u32::MAX,
+            _pad3: [0; 12],
         };
     }
 }

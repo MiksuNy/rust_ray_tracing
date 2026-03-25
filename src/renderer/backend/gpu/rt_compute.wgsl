@@ -25,6 +25,7 @@ const PI = 3.1415926535f;
 const TWO_PI = 6.283185307f;
 const PI_OVER_2 = 1.5707963268f;
 const PI_OVER_4 = 0.7853981634f;
+const EPSILON = 0.0001f;
 
 struct RendererInfo {
     current_sample: u32,
@@ -50,6 +51,7 @@ struct Material {
     ior: f32,
     roughness: f32,
     metallic: f32,
+    transparency: f32,
     base_color_tex_id: u32,
     emission_tex_id: u32,
     transparency_tex_id: u32,
@@ -89,6 +91,7 @@ struct HitInfo {
     uv: vec2<f32>,
     material_id: u32,
     front_face: bool,
+    tbn: mat3x3<f32>
 }
 
 struct BSDFType {
@@ -144,22 +147,13 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                 transmitted_distance = distance(hit_info.point, prev_hit_point);
             }
 
-            // TODO: Add transparency as a material property
-            if hit_material.transparency_tex_id != 0xFFFFFFFF {
-                let transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
-                if transparency < rand_f32(rng_seed) {
-                    (*ray).origin = hit_info.point + (*ray).direction * 0.0001f;
-                    continue;
-                }
+            if hit_material.transparency < rand_f32(rng_seed) {
+                (*ray).origin = hit_info.point + (*ray).direction * EPSILON;
+                continue;
             }
 
-            var tangent: vec3<f32>;
-            var bitangent: vec3<f32>;
-            build_orthonormal_basis(hit_info.normal, &tangent, &bitangent);
-            let tbn = mat3x3<f32>(tangent, bitangent, hit_info.normal);
-
-            let alpha = clamp(hit_material.roughness * hit_material.roughness, 0.0001f, 1.0f);
-            let sampled_normal = to_world(tbn, sample_ggx_vndf(to_local(tbn, -(*ray).direction), alpha, alpha, rng_seed));
+            let alpha = clamp(hit_material.roughness * hit_material.roughness, EPSILON, 1.0f);
+            let sampled_normal = to_world(hit_info.tbn, sample_ggx_vndf(to_local(hit_info.tbn, -(*ray).direction), alpha, alpha, rng_seed));
 
             var f0 = vec3<f32>(pow(1.0f - hit_material.ior, 2) / pow(1.0f + hit_material.ior, 2));
             f0 = mix(f0, hit_material.base_color, hit_material.metallic);
@@ -167,7 +161,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             let specular_dir = normalize(reflect((*ray).direction, sampled_normal));
             let transmitted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
-            let diffuse_dir = normalize(to_world(tbn, cosine_sample_hemisphere(rng_seed)));
+            let diffuse_dir = normalize(to_world(hit_info.tbn, cosine_sample_hemisphere(rng_seed)));
 
             let bsdf_type = select_bsdf(hit_material, rng_seed);
 
@@ -204,7 +198,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             // Russian roulette
             var rr_probability = 1.0f;
-            if curr_ray_depth >= 12 {
+            if curr_ray_depth >= 2 {
                 rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
                 if rr_probability < rand_f32(rng_seed) {
                     break;
@@ -214,11 +208,9 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             incoming_light += hit_material.emission * ray_color;
 
-            (*ray).origin = hit_info.point + new_dir * 0.0001f;
+            (*ray).origin = hit_info.point + new_dir * EPSILON;
             (*ray).direction = new_dir;
         } else {
-            curr_ray_depth += 1u;
-
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
             let sky_strength = vec3<f32>(1.0f);
 
@@ -229,92 +221,11 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
         }
     }
 
-    return incoming_light / f32(curr_ray_depth);
-}
-
-// https://www.pbr-book.org/3ed-2018/Reflection_Models#fragment-BSDFInlineFunctions-0
-fn cos_theta(w: vec3<f32>) -> f32 {
-    return w.z;
-}
-
-fn cos_2_theta(w: vec3<f32>) -> f32 {
-    return w.z * w.z;
-}
-
-fn abs_cos_theta(w: vec3<f32>) -> f32 {
-    return abs(w.z);
-}
-
-fn sin_2_theta(w: vec3<f32>) -> f32 {
-    return max(0.0f, 1.0f - cos_2_theta(w));
-}
-
-fn sin_theta(w: vec3<f32>) -> f32 {
-    return sqrt(sin_2_theta(w));
-}
-
-fn tan_theta(w: vec3<f32>) -> f32 {
-    return sin_theta(w) / cos_theta(w);
-}
-
-fn tan_2_theta(w: vec3<f32>) -> f32 {
-    return sin_2_theta(w) / cos_2_theta(w);
-}
-
-fn cos_phi(w: vec3<f32>) -> f32 {
-    let sin_theta = sin_theta(w);
-    if sin_theta == 0.0f {
-        return 1.0f;
+    if curr_ray_depth == 0u {
+        return incoming_light;
     } else {
-        return clamp(w.x / sin_theta, -1.0f, 1.0f);
+        return incoming_light / f32(curr_ray_depth);
     }
-}
-
-fn sin_phi(w: vec3<f32>) -> f32 {
-    let sin_theta = sin_theta(w);
-    if sin_theta == 0.0f {
-        return 0.0f;
-    } else {
-        return clamp(w.y / sin_theta, -1.0f, 1.0f);
-    }
-}
-
-fn cos_2_phi(w: vec3<f32>) -> f32 {
-    return cos_phi(w) * cos_phi(w);
-}
-
-fn sin_2_phi(w: vec3<f32>) -> f32 {
-    return sin_phi(w) * sin_phi(w);
-}
-
-fn cos_d_phi(wa: vec3<f32>, wb: vec3<f32>) -> f32 {
-    return clamp(
-        (wa.x * wb.x + wa.y * wb.y) / sqrt((wa.x * wa.x + wa.y * wa.y) * (wb.x * wb.x + wb.y * wb.y)),
-        -1.0f,
-        1.0f
-    );
-}
-
-fn beckmann_d(wh: vec3<f32>, ax: f32, ay: f32) -> f32 {
-    let tan_2_theta = tan_2_theta(wh);
-    if tan_2_theta >= 1e30f {
-        return 0.0f;
-    }
-    let cos_4_theta = cos_2_theta(wh) * cos_2_theta(wh);
-    return exp(-tan_2_theta * (cos_2_phi(wh) / (ax * ax) + sin_2_phi(wh) / (ay * ay))) / (PI * ax * ay * cos_4_theta);
-}
-
-fn beckmann_lamba(w: vec3<f32>, ax: f32, ay: f32) -> f32 {
-    let abs_tan_theta = abs(tan_theta(w));
-    if abs_tan_theta >= 1e30f {
-        return 0.0f;
-    }
-    let alpha = sqrt(cos_2_phi(w) * ax * ax + sin_2_phi(w) * ay * ay);
-    let a = 1.0f / (alpha * abs_tan_theta);
-    if a >= 1.6f {
-        return 0.0f;
-    }
-    return (1.0f - 1.259f * a + 0.396f * a * a) / (3.535f * a + 2.181f * a * a);
 }
 
 fn select_bsdf(material: Material, rng_seed: ptr<function, u32>) -> BSDFType {
@@ -370,6 +281,12 @@ fn get_material(hit_info: HitInfo, hit_material: Material) -> Material {
     }
     out_material.emission = emission;
 
+    var transparency = hit_material.transparency;
+    if hit_material.transparency_tex_id != 0xFFFFFFFF {
+        transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
+    }
+    out_material.transparency = transparency;
+
     return out_material;
 }
 
@@ -405,7 +322,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     let n_0 = tri.vertices[0].normal;
     let n_1 = tri.vertices[1].normal;
     let n_2 = tri.vertices[2].normal;
-    var normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
+    let normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
     hit_info.normal = normalize(select(-normal, normal, front_face));
 
     let t_0 = vec2<f32>(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
@@ -414,6 +331,11 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     hit_info.uv = t_0 * (1.0f - u - v) + (t_1 * u) + (t_2 * v);
 
     hit_info.material_id = tri.material_id;
+
+    var tangent: vec3<f32>;
+    var bitangent: vec3<f32>;
+    build_orthonormal_basis(hit_info.normal, &tangent, &bitangent);
+    hit_info.tbn = mat3x3<f32>(tangent, bitangent, hit_info.normal);
 
     return hit_info;
 }
