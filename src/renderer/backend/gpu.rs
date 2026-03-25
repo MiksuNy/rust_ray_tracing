@@ -53,12 +53,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         }
 
         command_encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &state.pp_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
+            state.pp_texture.as_image_copy(),
             wgpu::TexelCopyBufferInfo {
                 buffer: &state.output_staging_buffer,
                 layout: wgpu::TexelCopyBufferLayout {
@@ -67,11 +62,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
                     rows_per_image: Some(renderer.options.output_image_dimensions.1 as u32),
                 },
             },
-            wgpu::Extent3d {
-                width: renderer.options.output_image_dimensions.0 as u32,
-                height: renderer.options.output_image_dimensions.1 as u32,
-                depth_or_array_layers: 1,
-            },
+            state.pp_texture.size(),
         );
 
         state.renderer_info.curr_sample += 1;
