@@ -49,7 +49,8 @@ impl OBJ {
             has_mtl = false;
         }
 
-        lines.clone().for_each(|line| {
+        let mut active_material_id: u32 = 0;
+        for line in lines {
             let mut split = line.split_whitespace();
             if let Some(prefix) = split.nth(0) {
                 match prefix {
@@ -74,29 +75,28 @@ impl OBJ {
                         }
                         obj.vertex_buffer.normals.push(data);
                     }
+                    "usemtl" => {
+                        if has_mtl {
+                            let mtl_name = line.strip_prefix("usemtl ").unwrap();
+                            let Some(mtl_id) =
+                                obj.material_names.iter().position(|name| name == mtl_name)
+                            else {
+                                log_error!(
+                                    "While trying to set a material id for triangles, material with name '{}' doesn't exist",
+                                    mtl_name
+                                );
+                                continue;
+                            };
+                            active_material_id = mtl_id as u32;
+                        }
+                    }
+                    "f" => {
+                        let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
+                        tri.material_id = active_material_id;
+                        obj.tris.push(tri);
+                    }
                     _ => (),
                 }
-            }
-        });
-
-        // Triangles
-        let mut active_material_id: u32 = 0;
-        for line in lines {
-            if line.trim_start().starts_with("usemtl ") && has_mtl {
-                let mtl_name = line.strip_prefix("usemtl ").unwrap();
-                let Some(mtl_id) = obj.material_names.iter().position(|name| name == mtl_name)
-                else {
-                    log_error!(
-                        "While trying to set a material id for triangles, material with name '{}' doesn't exist",
-                        mtl_name
-                    );
-                    continue;
-                };
-                active_material_id = mtl_id as u32;
-            } else if line.trim_start().starts_with("f ") {
-                let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-                tri.material_id = active_material_id;
-                obj.tris.push(tri);
             }
         }
 
