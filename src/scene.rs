@@ -1,7 +1,8 @@
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
+use crate::log_error;
 use crate::texture::Texture;
-use crate::{Vec3f, log_error};
+use crate::vector::{Mat4f, Vec3f};
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]
@@ -10,6 +11,7 @@ pub struct Scene {
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub bvh: BVH,
+    pub camera: Camera,
 }
 
 impl Scene {
@@ -28,6 +30,11 @@ impl Scene {
             }
         }
     }
+
+    pub fn set_camera(&mut self, camera: Camera) {
+        self.camera = camera;
+        self.camera.update_view();
+    }
 }
 
 impl From<OBJ> for Scene {
@@ -37,22 +44,26 @@ impl From<OBJ> for Scene {
         for obj_tri in obj.tris {
             let mut vertices: [Vertex; 3] = [Vertex::default(); 3];
             for i in 0..3 {
+                let position = *obj
+                    .vertex_buffer
+                    .positions
+                    .get(obj_tri.positions[i])
+                    .unwrap_or(&[0.0; 3]);
+                let tex_coord = *obj
+                    .vertex_buffer
+                    .tex_coords
+                    .get(obj_tri.tex_coords[i])
+                    .unwrap_or(&[0.0; 2]);
+                let normal = *obj
+                    .vertex_buffer
+                    .normals
+                    .get(obj_tri.normals[i])
+                    .unwrap_or(&[0.0; 3]);
                 vertices[i] = Vertex {
-                    position: *obj
-                        .vertex_buffer
-                        .positions
-                        .get(obj_tri.positions[i])
-                        .unwrap_or(&[0.0; 3]),
-                    normal: *obj
-                        .vertex_buffer
-                        .normals
-                        .get(obj_tri.normals[i])
-                        .unwrap_or(&[0.0; 3]),
-                    tex_coord: *obj
-                        .vertex_buffer
-                        .tex_coords
-                        .get(obj_tri.tex_coords[i])
-                        .unwrap_or(&[0.0; 2]),
+                    position: position.into(),
+                    tex_coord_x: tex_coord[0],
+                    normal: normal.into(),
+                    tex_coord_y: tex_coord[1],
                 };
             }
             scene
@@ -69,72 +80,116 @@ impl From<OBJ> for Scene {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Vertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub tex_coord: [f32; 2],
+    pub position: Vec3f,
+    pub tex_coord_x: f32,
+    pub normal: Vec3f,
+    pub tex_coord_y: f32,
 }
 
-#[derive(Clone, Copy, Default)]
+// This needs to derive some bytemuck traits so we can put 'em in a buffer on the GPU
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Triangle {
     pub vertices: [Vertex; 3],
-    pub material_id: usize,
+    pub material_id: u32,
+    _pad: [u8; 12],
 }
 
 impl Triangle {
-    fn new(vertices: [Vertex; 3], material_id: usize) -> Self {
+    fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
         return Self {
             vertices,
             material_id,
+            _pad: [0; 12],
         };
     }
 
-    pub fn mid(&self) -> Vec3f {
-        return Vec3f::new(
-            (self.vertices[0].position[0]
-                + self.vertices[1].position[0]
-                + self.vertices[2].position[0])
-                / 3.0,
-            (self.vertices[0].position[1]
-                + self.vertices[1].position[1]
-                + self.vertices[2].position[1])
-                / 3.0,
-            (self.vertices[0].position[2]
-                + self.vertices[1].position[2]
-                + self.vertices[2].position[2])
-                / 3.0,
-        );
+    pub fn bounds_mid(&self) -> Vec3f {
+        let mut bounds_min = Vec3f::from(f32::MAX);
+        let mut bounds_max = Vec3f::from(-f32::MAX);
+
+        for vertex in self.vertices {
+            for i in 0..3 {
+                bounds_min.data[i] = f32::min(bounds_min.data[i], vertex.position.data[i]);
+                bounds_max.data[i] = f32::max(bounds_max.data[i], vertex.position.data[i]);
+            }
+        }
+
+        return (bounds_min + bounds_max) / 2.0;
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C, align(16))]
 pub struct Material {
-    pub name: String,
     pub base_color: Vec3f,
+    _pad1: [u8; 4],
     pub specular_tint: Vec3f,
+    _pad2: [u8; 4],
     pub emission: Vec3f,
     pub transmission: f32,
     pub ior: f32,
     pub roughness: f32,
     pub metallic: f32,
-    pub base_color_tex_id: i32,
-    pub emission_tex_id: i32,
+    pub transparency: f32,
+    pub base_color_tex_id: u32,
+    pub emission_tex_id: u32,
+    pub transparency_tex_id: u32,
+    pub roughness_tex_id: u32,
+    pub metallic_tex_id: u32,
+    _pad3: [u8; 12],
 }
 
 impl Default for Material {
     fn default() -> Self {
         return Self {
-            name: String::from("default_material"),
-            base_color: Vec3f::new(1.0, 1.0, 1.0),
-            specular_tint: Vec3f::new(1.0, 1.0, 1.0),
+            base_color: Vec3f::from(0.8),
+            _pad1: [0; 4],
+            specular_tint: Vec3f::from(1.0),
+            _pad2: [0; 4],
             emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
             ior: 1.45,
             roughness: 1.0,
             metallic: 0.0,
-            base_color_tex_id: -1,
-            emission_tex_id: -1,
+            transparency: 1.0,
+            base_color_tex_id: u32::MAX,
+            emission_tex_id: u32::MAX,
+            transparency_tex_id: u32::MAX,
+            roughness_tex_id: u32::MAX,
+            metallic_tex_id: u32::MAX,
+            _pad3: [0; 12],
         };
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Camera {
+    pub pitch: f32,
+    pub yaw: f32,
+    pub position: Vec3f,
+    pub forward: Vec3f,
+    pub up: Vec3f,
+    pub right: Vec3f,
+    pub look_at: Mat4f,
+}
+
+impl Camera {
+    pub fn update_view(&mut self) {
+        let direction = Vec3f::new(
+            f32::cos(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
+            f32::sin(f32::to_radians(self.pitch)),
+            f32::sin(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
+        );
+        let world_up = Vec3f::new(0.0, 1.0, 0.0);
+
+        self.forward = direction.normalized();
+        self.right = Vec3f::cross(world_up, self.forward).normalized();
+        self.up = Vec3f::cross(self.forward, self.right);
+
+        self.look_at = Mat4f::look_at(self.position, self.position + self.forward, self.up);
     }
 }

@@ -1,4 +1,4 @@
-use crate::{Vec3f, log_info, scene::Material, texture::Texture};
+use crate::{Vec3f, log_error, log_info, log_warning, scene::Material, texture::Texture};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -7,75 +7,96 @@ pub struct OBJ {
     pub vertex_buffer: VertexBuffer,
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
+    material_names: Vec<String>,
 }
 
 impl OBJ {
     pub fn load(path: &str) -> Self {
         let mut obj = OBJ::default();
 
+        log_info!("Loading scene from '{}'", path);
+
         let start_time = std::time::Instant::now();
 
         let buffer = std::fs::read_to_string(path).unwrap();
-        let lines = buffer
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("#"));
+        let lines = buffer.lines();
 
+        let has_mtl: bool;
         let mtl_lib = lines
             .clone()
             .find(|line| line.trim_start().starts_with("mtllib"));
         if mtl_lib.is_some() {
-            // NOTE: This only works for .mtl files in the same folder as the .obj file. Good
-            // enough for now but should be revisited at some point.
+            // FIXME: Add support for relative paths, for now this only works with absolute paths
             let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
             let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
             mtl_path.push('/');
             mtl_path.push_str(mtl_name);
-            Self::load_mtl(&mut obj, mtl_path.as_str());
+            let mtl_path_str = mtl_path.as_str();
+
+            if !std::fs::exists(mtl_path_str).unwrap() {
+                log_warning!(
+                    "An mtllib line was found but the corresponding .mtl file was not found, using default material for scene"
+                );
+                obj.materials = vec![Material::default()];
+                has_mtl = false;
+            } else {
+                Self::load_mtl(&mut obj, mtl_path_str);
+                has_mtl = true;
+            }
         } else {
+            log_info!("No mtllib found, using default material for scene");
             obj.materials = vec![Material::default()];
+            has_mtl = false;
         }
 
-        lines.clone().for_each(|line| {
-            let mut split = line.split_whitespace();
-            match split.nth(0).unwrap() {
-                "v" => {
-                    let mut data: [f32; 3] = [0.0; 3];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
-                    }
-                    obj.vertex_buffer.positions.push(data);
-                }
-                "vt" => {
-                    let mut data: [f32; 2] = [0.0; 2];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
-                    }
-                    obj.vertex_buffer.tex_coords.push(data);
-                }
-                "vn" => {
-                    let mut data: [f32; 3] = [0.0; 3];
-                    for (i, value) in split.enumerate() {
-                        data[i] = value.parse::<f32>().unwrap();
-                    }
-                    obj.vertex_buffer.normals.push(data);
-                }
-                _ => (),
-            }
-        });
-
-        // Triangles
-        let mut active_material_id: usize = 0;
+        let mut active_material_id: u32 = 0;
         for line in lines {
-            if line.trim_start().starts_with("usemtl ") {
-                active_material_id = obj
-                    .materials
-                    .iter()
-                    .position(|mtl| mtl.name == line.strip_prefix("usemtl ").unwrap())
-                    .unwrap();
-            } else if line.trim_start().starts_with("f ") {
-                let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-                tri.material_id = active_material_id;
-                obj.tris.push(tri);
+            let mut split = line.split_whitespace();
+            if let Some(prefix) = split.nth(0) {
+                match prefix {
+                    "v" => {
+                        let mut data: [f32; 3] = [0.0; 3];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.positions.push(data);
+                    }
+                    "vt" => {
+                        let mut data: [f32; 2] = [0.0; 2];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.tex_coords.push(data);
+                    }
+                    "vn" => {
+                        let mut data: [f32; 3] = [0.0; 3];
+                        for (i, value) in split.enumerate() {
+                            data[i] = value.parse::<f32>().unwrap();
+                        }
+                        obj.vertex_buffer.normals.push(data);
+                    }
+                    "usemtl" => {
+                        if has_mtl {
+                            let mtl_name = line.strip_prefix("usemtl ").unwrap();
+                            let Some(mtl_id) =
+                                obj.material_names.iter().position(|name| name == mtl_name)
+                            else {
+                                log_error!(
+                                    "While trying to set a material id for triangles, material with name '{}' doesn't exist",
+                                    mtl_name
+                                );
+                                continue;
+                            };
+                            active_material_id = mtl_id as u32;
+                        }
+                    }
+                    "f" => {
+                        let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
+                        tri.material_id = active_material_id;
+                        obj.tris.push(tri);
+                    }
+                    _ => (),
+                }
             }
         }
 
@@ -106,26 +127,16 @@ impl OBJ {
 
     fn load_mtl(obj: &mut OBJ, path: &str) {
         let buffer = std::fs::read_to_string(path).unwrap();
-        let mut lines = buffer
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("#"))
-            .peekable();
+        let mut lines = buffer.lines();
 
-        loop {
-            let Some(line) = lines.next() else {
-                break;
-            };
-
-            if line.contains("newmtl") {
+        while let Some(line) = lines.next() {
+            if line.starts_with("newmtl ") {
                 let mut material = Material::default();
-                material.name = line.strip_prefix("newmtl ").unwrap().to_string();
+                obj.material_names
+                    .push(line.strip_prefix("newmtl ").unwrap().to_string());
 
-                loop {
-                    if lines.peek().is_none() {
-                        break;
-                    }
-
-                    let mut attribute = lines.next().unwrap().split_whitespace();
+                while let Some(line) = lines.next() {
+                    let mut attribute = line.split_whitespace().into_iter();
                     // Consume the prefix so we can iterate only the data later
                     let Some(prefix) = attribute.nth(0) else {
                         break;
@@ -133,17 +144,17 @@ impl OBJ {
 
                     match prefix {
                         "Kd" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                            attribute.enumerate().for_each(|(i, val)| {
                                 material.base_color.data[i] = val.parse().unwrap();
                             });
                         }
                         "Ks" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                            attribute.enumerate().for_each(|(i, val)| {
                                 material.specular_tint.data[i] = val.parse().unwrap();
                             });
                         }
                         "Ke" => {
-                            attribute.into_iter().enumerate().for_each(|(i, val)| {
+                            attribute.enumerate().for_each(|(i, val)| {
                                 material.emission.data[i] = val.parse().unwrap();
                             });
                         }
@@ -161,22 +172,53 @@ impl OBJ {
                         "Tf" => {
                             material.transmission = attribute.next().unwrap().parse().unwrap();
                         }
-                        // NOTE: Materials can have duplicate textures, this might not be a problem
-                        // for smaller scenes but maybe we should check if a texture is already in
-                        // memory and just use that instead of duplicating?
+                        "d" => {
+                            material.transparency = attribute.next().unwrap().parse().unwrap();
+                        }
                         "map_Kd" => {
-                            let texture = Texture::load(attribute.next().unwrap());
-                            if texture.is_some() {
-                                obj.textures.push(texture.unwrap());
-                                material.base_color_tex_id = (obj.textures.len() - 1) as i32;
-                            }
+                            let texture_path = attribute.next().unwrap();
+                            Self::load_texture(
+                                texture_path,
+                                obj,
+                                &mut material,
+                                TextureType::BaseColor,
+                            );
                         }
                         "map_Ke" => {
-                            let texture = Texture::load(attribute.next().unwrap());
-                            if texture.is_some() {
-                                obj.textures.push(texture.unwrap());
-                                material.emission_tex_id = (obj.textures.len() - 1) as i32;
-                            }
+                            let texture_path = attribute.next().unwrap();
+                            Self::load_texture(
+                                texture_path,
+                                obj,
+                                &mut material,
+                                TextureType::Emission,
+                            );
+                        }
+                        "map_d" => {
+                            let texture_path = attribute.next().unwrap();
+                            Self::load_texture(
+                                texture_path,
+                                obj,
+                                &mut material,
+                                TextureType::Transparency,
+                            );
+                        }
+                        "map_Pr" => {
+                            let texture_path = attribute.next().unwrap();
+                            Self::load_texture(
+                                texture_path,
+                                obj,
+                                &mut material,
+                                TextureType::Roughness,
+                            );
+                        }
+                        "map_Pm" => {
+                            let texture_path = attribute.next().unwrap();
+                            Self::load_texture(
+                                texture_path,
+                                obj,
+                                &mut material,
+                                TextureType::Metallic,
+                            );
                         }
                         _ => continue,
                     }
@@ -186,6 +228,55 @@ impl OBJ {
             }
         }
     }
+
+    fn load_texture(path: &str, obj: &mut OBJ, material: &mut Material, texture_type: TextureType) {
+        let Some(texture) = Texture::load(path) else {
+            return;
+        };
+
+        let mut index: i32 = -1;
+        for (i, other_texture) in obj.textures.iter().enumerate() {
+            if texture.hash == other_texture.hash {
+                index = i as i32;
+                break;
+            }
+        }
+
+        let tex_id: u32;
+        if index == -1 {
+            obj.textures.push(texture);
+            log_info!("Loaded texture from '{}'", path);
+            tex_id = (obj.textures.len() - 1) as u32;
+        } else {
+            tex_id = index as u32;
+        }
+
+        match texture_type {
+            TextureType::BaseColor => {
+                material.base_color_tex_id = tex_id;
+            }
+            TextureType::Emission => {
+                material.emission_tex_id = tex_id;
+            }
+            TextureType::Transparency => {
+                material.transparency_tex_id = tex_id;
+            }
+            TextureType::Roughness => {
+                material.roughness_tex_id = tex_id;
+            }
+            TextureType::Metallic => {
+                material.metallic_tex_id = tex_id;
+            }
+        }
+    }
+}
+
+enum TextureType {
+    BaseColor,
+    Emission,
+    Transparency,
+    Roughness,
+    Metallic,
 }
 
 /// Used to build final scene triangles from .obj triangles
@@ -196,20 +287,17 @@ pub struct VertexBuffer {
     pub normals: Vec<[f32; 3]>,
 }
 
-/// In a .obj file, triangles are represented as indices (f) to a buffer of vertex data (v, vn, vt)
+/// In a .obj file, triangles are represented as indices (f) to a buffer of vertex data (v, vt, vn)
 #[derive(Default)]
 pub struct Triangle {
     pub positions: [usize; 3],
     pub tex_coords: [usize; 3],
     pub normals: [usize; 3],
-    pub material_id: usize,
+    pub material_id: u32,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseObjTriangleError;
-
 impl FromStr for Triangle {
-    type Err = ParseObjTriangleError;
+    type Err = ();
 
     /// Parses a group of vertices and returns a .obj representation of a triangle.
     ///
@@ -224,10 +312,11 @@ impl FromStr for Triangle {
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
         let read_index = |index_str: &str| -> usize {
-            if index_str.parse::<i32>().unwrap() < 1 {
-                panic!("Negative indices are not supported for OBJ!");
+            let index = index_str.parse::<i32>().unwrap() - 1;
+            if index < 0 {
+                panic!("Tried to load negative indices from an OBJ file");
             }
-            return index_str.parse::<usize>().unwrap() - 1;
+            return index as usize;
         };
 
         let vertices = s.split_whitespace();

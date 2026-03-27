@@ -1,13 +1,14 @@
-use crate::image::{Image, ImageFormat};
-use crate::renderer::{Parameters, Renderer};
-use crate::scene::Scene;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::renderer::backend::RendererBackend;
+use crate::renderer::*;
+use crate::scene::{Camera, Scene};
 use crate::vector::Vec3f;
 
 mod bvh;
-mod image;
 mod loader;
 mod log;
-mod ray;
 mod renderer;
 mod scene;
 mod texture;
@@ -15,37 +16,32 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 1000;
-const MAX_BOUNCES: usize = 2;
-const DEBUG_BVH: bool = false;
-const IMAGE_PATH: &str = "output.ppm";
-const OBJ_PATH: &str = "../res/balls_metallic.obj";
+const MAX_SAMPLE_COUNT: usize = 100;
+const MAX_BOUNCES: usize = 64;
+const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
+const IMAGE_PATH: &str = "output.png";
 
 fn main() {
-    log_info!("System logical cores: {}\n", rayon::current_num_threads());
-
-    log_info!("Parameters");
-    log_info!("- Width:        {}", WIDTH);
-    log_info!("- Height:       {}", HEIGHT);
-    log_info!("- Sample count: {}", SAMPLE_COUNT);
-    log_info!("- Max bounces:  {}", MAX_BOUNCES);
-    log_info!("- BVH debug:    {}", DEBUG_BVH);
-    log_info!("- Input file:   {}", OBJ_PATH);
-    log_info!("- Output file:  {}\n", IMAGE_PATH);
-
-    let renderer = Renderer::new(Parameters {
-        samples: SAMPLE_COUNT,
+    let Some(renderer) = Renderer::new(RendererOptions {
+        max_samples: MAX_SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
-        debug_mode: DEBUG_BVH,
-    });
-    let mut image = Image::new(ImageFormat::PPM, WIDTH, HEIGHT);
-    let Some(scene) = Scene::load(OBJ_PATH) else {
+        output_image_dimensions: (WIDTH, HEIGHT),
+        output_image_path: Some(IMAGE_PATH),
+        backend: RendererBackend::GPU,
+        is_realtime: true,
+    }) else {
         return;
     };
 
-    let start_time = std::time::Instant::now();
-    renderer.render_to_image(&scene, &mut image);
-    log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
+    let Some(mut scene) = Scene::load(OBJ_PATH) else {
+        return;
+    };
 
-    image.write_to_path(IMAGE_PATH);
+    let mut camera = Camera::default();
+    camera.position = Vec3f::new(10.120248, 2.112871, -0.013121704);
+    camera.pitch = 2.8992846;
+    camera.yaw = 0.20016655;
+    scene.set_camera(camera);
+
+    renderer.render(Rc::new(RefCell::new(scene)));
 }
