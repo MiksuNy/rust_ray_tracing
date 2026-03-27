@@ -20,8 +20,8 @@ impl Renderer {
             log_error!("Max ray depth must be greater than 0");
             return None;
         }
-        if options.max_samples == 0 {
-            log_error!("Max sample count must be greater than 0");
+        if options.samples == 0 {
+            log_error!("Sample count must be greater than 0");
             return None;
         }
         if options.output_image_path.is_none() && !options.is_realtime {
@@ -39,7 +39,7 @@ impl Renderer {
             options.output_image_dimensions.0,
             options.output_image_dimensions.1
         );
-        log_info!("- Max sample count:        {}", options.max_samples);
+        log_info!("- Sample count:            {}", options.samples);
         log_info!("- Max bounces:             {}", options.max_ray_depth);
         log_info!("- Backend:                 {:?}", options.backend);
         log_info!("- Realtime:                {}\n", options.is_realtime);
@@ -96,7 +96,7 @@ impl Default for Renderer {
 
 #[derive(Clone, Copy)]
 pub struct RendererOptions {
-    pub max_samples: usize,
+    pub samples: usize,
     pub max_ray_depth: usize,
     pub output_image_dimensions: (usize, usize),
     pub output_image_path: Option<&'static str>,
@@ -107,7 +107,7 @@ pub struct RendererOptions {
 impl Default for RendererOptions {
     fn default() -> Self {
         return Self {
-            max_samples: 1,
+            samples: 1,
             max_ray_depth: 6,
             output_image_dimensions: (1920, 1080),
             output_image_path: None,

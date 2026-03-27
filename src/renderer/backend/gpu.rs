@@ -13,7 +13,7 @@ use buffer::Buffer;
 pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8> {
     let mut state = State::new(renderer, scene);
 
-    for _ in 0..renderer.options.max_samples {
+    for _ in 0..renderer.options.samples {
         let mut command_encoder = state
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -68,6 +68,11 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         state.renderer_info.curr_sample += 1;
 
         state.queue.submit(Some(command_encoder.finish()));
+
+        state
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
     }
 
     let mut output_data: Vec<u8> = vec![];

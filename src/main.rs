@@ -16,14 +16,14 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const MAX_SAMPLE_COUNT: usize = 100;
+const SAMPLE_COUNT: usize = 10000;
 const MAX_BOUNCES: usize = 64;
-const OBJ_PATH: &str = "../res/pbrt_dragon.obj";
+const OBJ_PATH: &str = "../res/balls_metallic.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
     let Some(renderer) = Renderer::new(RendererOptions {
-        max_samples: MAX_SAMPLE_COUNT,
+        samples: SAMPLE_COUNT,
         max_ray_depth: MAX_BOUNCES,
         output_image_dimensions: (WIDTH, HEIGHT),
         output_image_path: Some(IMAGE_PATH),
@@ -38,9 +38,9 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = Vec3f::new(10.120248, 2.112871, -0.013121704);
-    camera.pitch = 2.8992846;
-    camera.yaw = 0.20016655;
+    camera.position = Vec3f::new(0.00031383708, 0.66269356, 1.9233936);
+    camera.pitch = 16.399261;
+    camera.yaw = -269.7043;
     scene.set_camera(camera);
 
     renderer.render(Rc::new(RefCell::new(scene)));
