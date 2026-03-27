@@ -10,7 +10,6 @@ wgpu = "28.0.0"
 winit = "0.30.12"
 pollster = "0.4.0"
 bytemuck = "=1.24.0"
-flume = "0.12.0"
 
 [profile.dev]
 opt-level = 3

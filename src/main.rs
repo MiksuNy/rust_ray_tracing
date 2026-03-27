@@ -16,7 +16,7 @@ mod vector;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 10000;
+const SAMPLE_COUNT: usize = 100;
 const MAX_BOUNCES: usize = 64;
 const OBJ_PATH: &str = "../res/balls_metallic.obj";
 const IMAGE_PATH: &str = "output.png";
@@ -28,7 +28,7 @@ fn main() {
         output_image_dimensions: (WIDTH, HEIGHT),
         output_image_path: Some(IMAGE_PATH),
         backend: RendererBackend::GPU,
-        is_realtime: true,
+        is_realtime: false,
     }) else {
         return;
     };

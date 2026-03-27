@@ -77,13 +77,11 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = state.output_staging_buffer.slice(..);
-    let (sender, receiver) = flume::bounded(1);
-    buffer_slice.map_async(wgpu::MapMode::Read, move |r| sender.send(r).unwrap());
+    buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
     state
         .device
         .poll(wgpu::PollType::wait_indefinitely())
         .unwrap();
-    receiver.recv_async().await.unwrap().unwrap();
     {
         let view = buffer_slice.get_mapped_range();
         output_data.resize(view.len(), 0);
