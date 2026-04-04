@@ -1,6 +1,8 @@
 use crate::bvh::Node;
+use crate::math::vec::*;
+use crate::math::vec2::*;
+use crate::math::vec3::*;
 use crate::scene::{Scene, Triangle};
-use crate::vector::{Vec2f, Vec3Swizzles, Vec3f};
 
 #[derive(Clone, Copy)]
 pub struct Ray {

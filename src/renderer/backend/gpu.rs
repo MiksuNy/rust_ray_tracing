@@ -1,9 +1,9 @@
 use crate::{
     bvh::Node,
     log_info,
+    math::{mat4::*, vec3::*},
     renderer::Renderer,
     scene::{Camera, Material, Scene, Triangle},
-    vector::{Mat4f, Vec3f},
 };
 
 mod buffer;

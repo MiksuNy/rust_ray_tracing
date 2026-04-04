@@ -1,4 +1,7 @@
-use crate::{Vec3f, log_error, log_info, log_warning, scene::Material, texture::Texture};
+use crate::{
+    log_error, log_info, log_warning, math::vec::*, math::vec3::*, scene::Material,
+    texture::Texture,
+};
 use std::str::FromStr;
 
 #[derive(Default)]

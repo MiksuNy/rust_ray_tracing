@@ -1,7 +1,9 @@
 use crate::log_info;
+use crate::math::rand_f32;
+use crate::math::vec::*;
+use crate::math::vec3::*;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
-use crate::vector::{Vec3Swizzles, Vec3f};
 use ray::Ray;
 use rayon::prelude::*;
 
@@ -34,8 +36,8 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
 
             for _ in 0..renderer.options.samples {
                 let jitter = Vec3f::new(
-                    Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
-                    Vec3f::rand_f32(&mut rng_state) * 2.0 - 1.0,
+                    rand_f32(&mut rng_state) * 2.0 - 1.0,
+                    rand_f32(&mut rng_state) * 2.0 - 1.0,
                     0.0,
                 ) * 0.0005;
                 let direction = (scene.camera.look_at
@@ -56,7 +58,7 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
             }
 
             final_color /= renderer.options.samples as f32;
-            final_color = Vec3f::linear_to_gamma(final_color);
+            final_color = Vec3f::linear_to_srgb(final_color);
 
             let rgb: [u8; 3] = final_color.into();
             return [rgb[0], rgb[1], rgb[2], 255];

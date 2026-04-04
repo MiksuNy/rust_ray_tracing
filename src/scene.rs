@@ -1,8 +1,10 @@
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
 use crate::log_error;
+use crate::math::mat4::Mat4f;
+use crate::math::vec::*;
+use crate::math::vec3::*;
 use crate::texture::Texture;
-use crate::vector::{Mat4f, Vec3f};
 
 /// Representation of a 3D scene for use in the ray tracer.
 #[derive(Clone, Default)]

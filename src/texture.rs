@@ -1,7 +1,4 @@
-use crate::{
-    log_error,
-    vector::{Vec2Swizzles, Vec2f},
-};
+use crate::{log_error, math::vec2::*};
 
 #[derive(Clone, Default)]
 pub struct Texture {
