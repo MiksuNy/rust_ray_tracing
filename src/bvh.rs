@@ -1,7 +1,7 @@
 use crate::{
     log_info,
+    math::vec3::*,
     scene::{Scene, Triangle},
-    vector::{Vec3Swizzles, Vec3f},
 };
 
 #[derive(Clone, Default)]

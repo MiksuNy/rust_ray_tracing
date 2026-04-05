@@ -1,5 +1,8 @@
-use crate::{Vec3f, log_error, log_info, log_warning, scene::Material, texture::Texture};
-use std::str::FromStr;
+use crate::{
+    log_error, log_info, log_warning, math::vec::*, math::vec3::*, scene::Material,
+    texture::Texture,
+};
+use std::{path::PathBuf, str::FromStr};
 
 #[derive(Default)]
 pub struct OBJ {
@@ -22,29 +25,24 @@ impl OBJ {
         let lines = buffer.lines();
 
         let has_mtl: bool;
-        let mtl_lib = lines
+        if let Some(mtl_path) = lines
             .clone()
-            .find(|line| line.trim_start().starts_with("mtllib"));
-        if mtl_lib.is_some() {
-            // FIXME: Add support for relative paths, for now this only works with absolute paths
-            let mtl_name = mtl_lib.unwrap().strip_prefix("mtllib ").unwrap();
-            let mut mtl_path = path.split_at(path.rfind("/").unwrap()).0.to_string();
-            mtl_path.push('/');
-            mtl_path.push_str(mtl_name);
-            let mtl_path_str = mtl_path.as_str();
-
-            if !std::fs::exists(mtl_path_str).unwrap() {
+            .find(|line| line.trim_start().starts_with("mtllib"))
+            .unwrap()
+            .strip_prefix("mtllib ")
+        {
+            if let Some(mtl_path) = Self::get_resource_path(path, mtl_path) {
+                Self::load_mtl(&mut obj, mtl_path.as_str());
+                has_mtl = true;
+            } else {
                 log_warning!(
                     "An mtllib line was found but the corresponding .mtl file was not found, using default material for scene"
                 );
                 obj.materials = vec![Material::default()];
                 has_mtl = false;
-            } else {
-                Self::load_mtl(&mut obj, mtl_path_str);
-                has_mtl = true;
             }
         } else {
-            log_info!("No mtllib found, using default material for scene");
+            log_info!("No mtllib line found, using default material for scene");
             obj.materials = vec![Material::default()];
             has_mtl = false;
         }
@@ -176,49 +174,64 @@ impl OBJ {
                             material.transparency = attribute.next().unwrap().parse().unwrap();
                         }
                         "map_Kd" => {
-                            let texture_path = attribute.next().unwrap();
-                            Self::load_texture(
-                                texture_path,
-                                obj,
-                                &mut material,
-                                TextureType::BaseColor,
-                            );
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut material,
+                                    TextureType::BaseColor,
+                                );
+                            }
                         }
                         "map_Ke" => {
-                            let texture_path = attribute.next().unwrap();
-                            Self::load_texture(
-                                texture_path,
-                                obj,
-                                &mut material,
-                                TextureType::Emission,
-                            );
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut material,
+                                    TextureType::Emission,
+                                );
+                            }
                         }
                         "map_d" => {
-                            let texture_path = attribute.next().unwrap();
-                            Self::load_texture(
-                                texture_path,
-                                obj,
-                                &mut material,
-                                TextureType::Transparency,
-                            );
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut material,
+                                    TextureType::Transparency,
+                                );
+                            }
                         }
                         "map_Pr" => {
-                            let texture_path = attribute.next().unwrap();
-                            Self::load_texture(
-                                texture_path,
-                                obj,
-                                &mut material,
-                                TextureType::Roughness,
-                            );
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut material,
+                                    TextureType::Roughness,
+                                );
+                            }
                         }
                         "map_Pm" => {
-                            let texture_path = attribute.next().unwrap();
-                            Self::load_texture(
-                                texture_path,
-                                obj,
-                                &mut material,
-                                TextureType::Metallic,
-                            );
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut material,
+                                    TextureType::Metallic,
+                                );
+                            }
                         }
                         _ => continue,
                     }
@@ -268,6 +281,29 @@ impl OBJ {
                 material.metallic_tex_id = tex_id;
             }
         }
+    }
+
+    /// Takes a path to the file the resource is referenced in, and a path to the actual resource
+    /// itself.
+    ///
+    /// Returns an Option containing the path to the resource with the following rules:
+    ///
+    /// If resource_path is relative to file_path, returns file_path + resource_path.
+    /// If resource_path is absolute, returns resource_path.
+    /// Otherwise return None.
+    fn get_resource_path(file_path: &str, resource_path: &str) -> Option<String> {
+        let mut file_path_buf = PathBuf::from(file_path);
+        let mut resource_path_buf = PathBuf::from(resource_path);
+
+        if resource_path_buf.is_relative() {
+            file_path_buf.pop();
+            resource_path_buf = file_path_buf.join(resource_path_buf);
+            return Some(resource_path_buf.to_string_lossy().to_string());
+        } else if resource_path_buf.is_absolute() {
+            return Some(resource_path_buf.to_string_lossy().to_string());
+        }
+
+        return None;
     }
 }
 

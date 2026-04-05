@@ -1,9 +1,9 @@
 use crate::{
     bvh::Node,
     log_info,
+    math::{mat4::*, vec3::*},
     renderer::Renderer,
     scene::{Camera, Material, Scene, Triangle},
-    vector::{Mat4f, Vec3f},
 };
 
 mod buffer;
@@ -13,7 +13,7 @@ use buffer::Buffer;
 pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8> {
     let mut state = State::new(renderer, scene);
 
-    for _ in 0..renderer.options.max_samples {
+    for _ in 0..renderer.options.samples {
         let mut command_encoder = state
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -68,17 +68,20 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         state.renderer_info.curr_sample += 1;
 
         state.queue.submit(Some(command_encoder.finish()));
+
+        state
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
     }
 
     let mut output_data: Vec<u8> = vec![];
     let buffer_slice = state.output_staging_buffer.slice(..);
-    let (sender, receiver) = flume::bounded(1);
-    buffer_slice.map_async(wgpu::MapMode::Read, move |r| sender.send(r).unwrap());
+    buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
     state
         .device
         .poll(wgpu::PollType::wait_indefinitely())
         .unwrap();
-    receiver.recv_async().await.unwrap().unwrap();
     {
         let view = buffer_slice.get_mapped_range();
         output_data.resize(view.len(), 0);

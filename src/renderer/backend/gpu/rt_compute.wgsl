@@ -198,7 +198,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             // Russian roulette
             var rr_probability = 1.0f;
-            if curr_ray_depth >= 2 {
+            if curr_ray_depth >= 4 {
                 rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
                 if rr_probability < rand_f32(rng_seed) {
                     break;
