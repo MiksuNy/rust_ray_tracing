@@ -25,12 +25,11 @@ impl OBJ {
         let lines = buffer.lines();
 
         let has_mtl: bool;
-        if let Some(mtl_path) = lines
+        if let Some(mtl_line) = lines
             .clone()
             .find(|line| line.trim_start().starts_with("mtllib"))
-            .unwrap()
-            .strip_prefix("mtllib ")
         {
+            let mtl_path = mtl_line.strip_prefix("mtllib ").unwrap();
             if let Some(mtl_path) = Self::get_resource_path(path, mtl_path) {
                 Self::load_mtl(&mut obj, mtl_path.as_str());
                 has_mtl = true;
