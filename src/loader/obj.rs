@@ -353,9 +353,9 @@ impl Triangle {
         let triangle_from_index_groups = |index_groups: Vec<&str>| -> Self {
             let mut triangle = Triangle::default();
 
-            for (group_id, indices) in index_groups.iter().enumerate() {
-                if indices.contains("//") {
-                    indices
+            for (group_id, index_group) in index_groups.iter().enumerate() {
+                if index_group.contains("//") {
+                    index_group
                         .split("//")
                         .enumerate()
                         .for_each(|(i, index_str)| match i {
@@ -363,8 +363,8 @@ impl Triangle {
                             1 => triangle.normals[group_id] = read_index(index_str),
                             _ => (),
                         });
-                } else if indices.contains("/") {
-                    let split = indices.split("/");
+                } else if index_group.contains("/") {
+                    let split = index_group.split("/");
                     if split.clone().count() == 2 {
                         split.enumerate().for_each(|(i, index_str)| match i {
                             0 => triangle.positions[group_id] = read_index(index_str),
@@ -380,7 +380,7 @@ impl Triangle {
                         });
                     }
                 } else {
-                    indices
+                    index_group
                         .split(" ")
                         .for_each(|index_str| triangle.positions[group_id] = read_index(index_str));
                 }
