@@ -2,7 +2,7 @@ use crate::{
     log_error, log_info, log_warning, math::vec::*, math::vec3::*, scene::Material,
     texture::Texture,
 };
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct OBJ {
@@ -88,9 +88,16 @@ impl OBJ {
                         }
                     }
                     "f" => {
-                        let mut tri = Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-                        tri.material_id = active_material_id;
-                        obj.tris.push(tri);
+                        let mut triangles =
+                            Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
+
+                        triangles.0.material_id = active_material_id;
+                        obj.tris.push(triangles.0);
+
+                        if triangles.1.is_some() {
+                            triangles.1.as_mut().unwrap().material_id = active_material_id;
+                            obj.tris.push(triangles.1.unwrap());
+                        }
                     }
                     _ => (),
                 }
@@ -331,19 +338,8 @@ pub struct Triangle {
     pub material_id: u32,
 }
 
-impl FromStr for Triangle {
-    type Err = ();
-
-    /// Parses a group of vertices and returns a .obj representation of a triangle.
-    ///
-    /// Acceptable formats are:
-    /// v/vt/vn v/vt/vn v/vt/vn
-    /// v//vn v//vn v//vn
-    /// v/vt v/vt v/vt
-    /// v v v
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut triangle = Triangle::default();
-
+impl Triangle {
+    pub fn from_str(s: &str) -> Result<(Self, Option<Self>), ()> {
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
         let read_index = |index_str: &str| -> usize {
@@ -354,40 +350,62 @@ impl FromStr for Triangle {
             return index as usize;
         };
 
-        let vertices = s.split_whitespace();
-        for (vertex_id, vertex) in vertices.enumerate() {
-            if vertex.contains("//") {
-                vertex
-                    .split("//")
-                    .enumerate()
-                    .for_each(|(i, index_str)| match i {
-                        0 => triangle.positions[vertex_id] = read_index(index_str),
-                        1 => triangle.normals[vertex_id] = read_index(index_str),
-                        _ => (),
-                    });
-            } else if vertex.contains("/") {
-                let split = vertex.split("/");
-                if split.clone().count() == 2 {
-                    split.enumerate().for_each(|(i, index_str)| match i {
-                        0 => triangle.positions[vertex_id] = read_index(index_str),
-                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
-                        _ => (),
-                    });
-                } else if split.clone().count() == 3 {
-                    split.enumerate().for_each(|(i, index_str)| match i {
-                        0 => triangle.positions[vertex_id] = read_index(index_str),
-                        1 => triangle.tex_coords[vertex_id] = read_index(index_str),
-                        2 => triangle.normals[vertex_id] = read_index(index_str),
-                        _ => (),
-                    });
-                }
-            } else {
-                vertex
-                    .split(" ")
-                    .for_each(|index_str| triangle.positions[vertex_id] = read_index(index_str));
-            }
-        }
+        let triangle_from_index_groups = |index_groups: Vec<&str>| -> Self {
+            let mut triangle = Triangle::default();
 
-        return Ok(triangle);
+            for (group_id, indices) in index_groups.iter().enumerate() {
+                if indices.contains("//") {
+                    indices
+                        .split("//")
+                        .enumerate()
+                        .for_each(|(i, index_str)| match i {
+                            0 => triangle.positions[group_id] = read_index(index_str),
+                            1 => triangle.normals[group_id] = read_index(index_str),
+                            _ => (),
+                        });
+                } else if indices.contains("/") {
+                    let split = indices.split("/");
+                    if split.clone().count() == 2 {
+                        split.enumerate().for_each(|(i, index_str)| match i {
+                            0 => triangle.positions[group_id] = read_index(index_str),
+                            1 => triangle.tex_coords[group_id] = read_index(index_str),
+                            _ => (),
+                        });
+                    } else if split.clone().count() == 3 {
+                        split.enumerate().for_each(|(i, index_str)| match i {
+                            0 => triangle.positions[group_id] = read_index(index_str),
+                            1 => triangle.tex_coords[group_id] = read_index(index_str),
+                            2 => triangle.normals[group_id] = read_index(index_str),
+                            _ => (),
+                        });
+                    }
+                } else {
+                    indices
+                        .split(" ")
+                        .for_each(|index_str| triangle.positions[group_id] = read_index(index_str));
+                }
+            }
+
+            return triangle;
+        };
+
+        // 3 = one triangle
+        // 4 = one quad split into two triangles
+        let index_groups = s.split_whitespace().collect::<Vec<&str>>();
+        match index_groups.len() {
+            3 => {
+                return Ok((triangle_from_index_groups(index_groups), None));
+            }
+            4 => {
+                let index_groups_1 = vec![index_groups[0], index_groups[1], index_groups[3]];
+                let index_groups_2 = vec![index_groups[1], index_groups[2], index_groups[3]];
+
+                return Ok((
+                    triangle_from_index_groups(index_groups_1),
+                    Some(triangle_from_index_groups(index_groups_2)),
+                ));
+            }
+            _ => return Err(()),
+        }
     }
 }
