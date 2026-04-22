@@ -5,8 +5,8 @@ Features
 - GPU rendering backend with [wgpu](https://crates.io/crates/wgpu)
     - Realtime mode with [winit](https://crates.io/crates/winit)
 - CPU rendering backend, multithreaded with [rayon](https://crates.io/crates/rayon)
-    - NOTE: The GPU backend is more feature complete for now
-- Custom OBJ loader (only triangulated models) + MTL with some PBR features
+    - NOTE: The GPU backend is more feature complete for now & CPU backend only supports offline rendering
+- Custom OBJ & MTL loader with some PBR features
 - Textures and output images use this [image](https://crates.io/crates/image) crate for decoding and encoding
 - Smooth shading (per vertex normals)
 - BVH with binned SAH
@@ -44,12 +44,12 @@ Resources & references
 
 Known issues
 --------
-- Some .obj exporters might not work with this for various reasons (negative indices, etc.). The best way to get around this is to bring the model into Blender and export again.
+- Some OBJ exporters might not work with this for various reasons (negative indices, etc.). The best way to get around this is to bring the model into Blender and export again.
 --------
 
 Contributing
 --------
 - Contributions are very much welcome :)
-- If you would like to contribute, open an issue on GitHub detailing what you're adding (or what you think should be added).
+- If you would like to contribute, open an issue on GitHub detailing what you're adding (or what you think should be added / improved / fixed).
 - I don't have any specific guidelines on how you should structure the code other than to try to follow the style and structure already in place, unless you think there's a better way.
 --------

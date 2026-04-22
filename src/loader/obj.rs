@@ -94,9 +94,9 @@ impl OBJ {
                         triangles.0.material_id = active_material_id;
                         obj.tris.push(triangles.0);
 
-                        if triangles.1.is_some() {
-                            triangles.1.as_mut().unwrap().material_id = active_material_id;
-                            obj.tris.push(triangles.1.unwrap());
+                        if let Some(mut other_triangle) = triangles.1 {
+                            other_triangle.material_id = active_material_id;
+                            obj.tris.push(other_triangle);
                         }
                     }
                     _ => (),
@@ -353,9 +353,9 @@ impl Triangle {
         let triangle_from_index_groups = |index_groups: Vec<&str>| -> Self {
             let mut triangle = Triangle::default();
 
-            for (group_id, index_group) in index_groups.iter().enumerate() {
-                if index_group.contains("//") {
-                    index_group
+            for (group_id, group) in index_groups.iter().enumerate() {
+                if group.contains("//") {
+                    group
                         .split("//")
                         .enumerate()
                         .for_each(|(i, index_str)| match i {
@@ -363,8 +363,8 @@ impl Triangle {
                             1 => triangle.normals[group_id] = read_index(index_str),
                             _ => (),
                         });
-                } else if index_group.contains("/") {
-                    let split = index_group.split("/");
+                } else if group.contains("/") {
+                    let split = group.split("/");
                     if split.clone().count() == 2 {
                         split.enumerate().for_each(|(i, index_str)| match i {
                             0 => triangle.positions[group_id] = read_index(index_str),
@@ -380,7 +380,7 @@ impl Triangle {
                         });
                     }
                 } else {
-                    index_group
+                    group
                         .split(" ")
                         .for_each(|index_str| triangle.positions[group_id] = read_index(index_str));
                 }
