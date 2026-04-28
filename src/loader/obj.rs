@@ -88,15 +88,11 @@ impl OBJ {
                         }
                     }
                     "f" => {
-                        let mut triangles =
+                        let triangles =
                             Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-
-                        triangles.0.material_id = active_material_id;
-                        obj.tris.push(triangles.0);
-
-                        if let Some(mut other_triangle) = triangles.1 {
-                            other_triangle.material_id = active_material_id;
-                            obj.tris.push(other_triangle);
+                        for mut triangle in triangles {
+                            triangle.material_id = active_material_id;
+                            obj.tris.push(triangle);
                         }
                     }
                     _ => (),
@@ -339,7 +335,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    pub fn from_str(s: &str) -> Result<(Self, Option<Self>), ()> {
+    pub fn from_str(s: &str) -> Result<Vec<Self>, ()> {
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
         let read_index = |index_str: &str| -> usize {
@@ -350,7 +346,7 @@ impl Triangle {
             return index as usize;
         };
 
-        let triangle_from_index_groups = |index_groups: Vec<&str>| -> Self {
+        let triangle_from_index_groups = |index_groups: &[&str; 3]| -> Self {
             let mut triangle = Triangle::default();
 
             for (group_id, group) in index_groups.iter().enumerate() {
@@ -389,23 +385,39 @@ impl Triangle {
             return triangle;
         };
 
-        // 3 = one triangle
-        // 4 = one quad split into two triangles
         let index_groups = s.split_whitespace().collect::<Vec<&str>>();
         match index_groups.len() {
+            // triangle
             3 => {
-                return Ok((triangle_from_index_groups(index_groups), None));
+                return Ok(vec![triangle_from_index_groups(&[
+                    index_groups[0],
+                    index_groups[1],
+                    index_groups[2],
+                ])]);
             }
+            // quad
             4 => {
-                let index_groups_1 = vec![index_groups[0], index_groups[1], index_groups[3]];
-                let index_groups_2 = vec![index_groups[1], index_groups[2], index_groups[3]];
+                let index_groups_1 = [index_groups[0], index_groups[1], index_groups[3]];
+                let index_groups_2 = [index_groups[1], index_groups[2], index_groups[3]];
 
-                return Ok((
-                    triangle_from_index_groups(index_groups_1),
-                    Some(triangle_from_index_groups(index_groups_2)),
-                ));
+                return Ok(vec![
+                    triangle_from_index_groups(&index_groups_1),
+                    triangle_from_index_groups(&index_groups_2),
+                ]);
             }
-            _ => return Err(()),
+            // n-gon
+            5.. => {
+                let mut triangles: Vec<Self> = vec![];
+                for i in 0..index_groups.len() - 2 {
+                    triangles.push(triangle_from_index_groups(&[
+                        index_groups[0],
+                        index_groups[i + 1],
+                        index_groups[i + 2],
+                    ]));
+                }
+                return Ok(triangles);
+            }
+            _ => Err(()),
         }
     }
 }
