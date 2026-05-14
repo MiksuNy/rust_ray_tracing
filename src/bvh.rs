@@ -95,14 +95,11 @@ impl BVH {
             return;
         }
 
-        let split_axis = best_split_axis;
-        let split_pos = best_split_pos;
-
         // Sort triangles
         let mut i: u32 = node.first_tri_or_child;
         let mut j: u32 = i + node.num_tris - 1;
         while i <= j {
-            if scene.tris[i as usize].bounds_mid().data[split_axis] < split_pos {
+            if scene.tris[i as usize].bounds_mid().data[best_split_axis] < best_split_pos {
                 i += 1;
             } else {
                 scene.tris.swap(i as usize, j as usize);
