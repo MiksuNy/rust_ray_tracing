@@ -2,6 +2,7 @@ use crate::bvh::Node;
 use crate::math::vec::*;
 use crate::math::vec2::*;
 use crate::math::vec3::*;
+use crate::scene::Material;
 use crate::scene::{Scene, Triangle};
 
 #[derive(Clone, Copy)]
@@ -149,7 +150,8 @@ impl Ray {
             Self::traverse_bvh(ray, scene, &mut hit_info);
 
             if hit_info.has_hit {
-                let hit_material = &scene.materials[hit_info.material_id as usize];
+                let hit_material = &scene.materials.values().collect::<Vec<&Material>>()
+                    [hit_info.material_id as usize];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;
@@ -157,17 +159,18 @@ impl Ray {
                     ior = hit_material.ior;
                 }
 
-                if hit_material.base_color_tex_id != u32::MAX {
+                let unpacked_tex_ids_1 = hit_material.packed_tex_ids_1.to_le_bytes();
+
+                if unpacked_tex_ids_1[0] != u8::MAX {
                     ray_color *= Vec3f::from(
-                        scene.textures[hit_material.base_color_tex_id as usize]
-                            .color_at(hit_info.uv),
+                        scene.textures[unpacked_tex_ids_1[0] as usize].color_at(hit_info.uv),
                     );
                 } else {
                     ray_color *= hit_material.base_color;
                 }
-                if hit_material.emission_tex_id != u32::MAX {
+                if unpacked_tex_ids_1[1] != u8::MAX {
                     emitted_light += Vec3f::from(
-                        scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
+                        scene.textures[unpacked_tex_ids_1[1] as usize].color_at(hit_info.uv),
                     );
                 } else {
                     emitted_light += hit_material.emission;

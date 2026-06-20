@@ -4,6 +4,7 @@ use crate::{
     math::{mat4::*, vec3::*},
     renderer::Renderer,
     scene::{Camera, Material, Scene, Triangle},
+    texture::TextureType,
 };
 
 mod buffer;
@@ -315,7 +316,11 @@ struct StorageBuffers {
     triangle_buffer: Buffer,
     bvh_buffer: Buffer,
     material_buffer: Buffer,
-    texture_data_buffer: Buffer,
+    base_color_texture_data_buffer: Buffer,
+    roughness_texture_data_buffer: Buffer,
+    metallic_texture_data_buffer: Buffer,
+    emission_texture_data_buffer: Buffer,
+    normal_texture_data_buffer: Buffer,
     texture_info_buffer: Buffer,
 }
 
@@ -323,7 +328,15 @@ impl StorageBuffers {
     fn new(device: &wgpu::Device, scene: &Scene) -> Self {
         let triangle_buffer = Buffer::create_storage_buffer(device, 0, &scene.tris);
         let bvh_buffer = Buffer::create_storage_buffer(device, 1, &scene.bvh.nodes);
-        let material_buffer = Buffer::create_storage_buffer(device, 2, &scene.materials);
+        let material_buffer = Buffer::create_storage_buffer(
+            device,
+            2,
+            &scene
+                .materials
+                .clone()
+                .into_values()
+                .collect::<Vec<Material>>(),
+        );
         log_info!(
             "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
             triangle_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
@@ -339,34 +352,129 @@ impl StorageBuffers {
             material_buffer.buffer.size() as f32 / 1024.0,
             material_buffer.buffer.size() / size_of::<Material>() as u64
         );
-        let mut texture_data: Vec<u32> = Vec::new();
-        let mut texture_info: Vec<[u32; 3]> = Vec::new();
+
+        let mut base_color_texture_data: Vec<u32> = Vec::new();
+        let mut base_color_texture_count: u8 = 0;
+        let mut roughness_texture_data: Vec<u32> = Vec::new();
+        let mut roughness_texture_count: u8 = 0;
+        let mut metallic_texture_data: Vec<u32> = Vec::new();
+        let mut metallic_texture_count: u8 = 0;
+        let mut emission_texture_data: Vec<u32> = Vec::new();
+        let mut emission_texture_count: u8 = 0;
+        let mut normal_texture_data: Vec<u32> = Vec::new();
+        let mut normal_texture_count: u8 = 0;
+        let mut texture_info: Vec<[u32; 4]> = Vec::new();
         if !scene.textures.is_empty() {
-            scene.textures.iter().for_each(|texture| {
-                let data = texture
-                    .pixel_data
-                    .iter()
-                    .map(|bytes| {
-                        return u32::from_le_bytes(*bytes);
-                    })
-                    .collect::<Vec<u32>>();
+            for texture in scene.textures.iter() {
+                let data = texture.packed_data();
+
+                let offset: u32;
+                let texture_buffer_index: u32;
+                match texture.texture_type {
+                    TextureType::BaseColor => {
+                        offset = base_color_texture_data.len() as u32;
+                        base_color_texture_data.extend_from_slice(data.as_slice());
+                        base_color_texture_count += 1;
+                        texture_buffer_index = 0;
+                    }
+                    TextureType::Transparency => {
+                        offset = base_color_texture_data.len() as u32;
+                        base_color_texture_data.extend_from_slice(data.as_slice());
+                        base_color_texture_count += 1;
+                        texture_buffer_index = 0;
+                    }
+                    TextureType::Roughness => {
+                        offset = roughness_texture_data.len() as u32;
+                        roughness_texture_data.extend_from_slice(data.as_slice());
+                        roughness_texture_count += 1;
+                        texture_buffer_index = 1;
+                    }
+                    TextureType::Metallic => {
+                        offset = metallic_texture_data.len() as u32;
+                        metallic_texture_data.extend_from_slice(data.as_slice());
+                        metallic_texture_count += 1;
+                        texture_buffer_index = 2;
+                    }
+                    TextureType::Emission => {
+                        offset = emission_texture_data.len() as u32;
+                        emission_texture_data.extend_from_slice(data.as_slice());
+                        emission_texture_count += 1;
+                        texture_buffer_index = 3;
+                    }
+                    TextureType::Normal => {
+                        offset = normal_texture_data.len() as u32;
+                        normal_texture_data.extend_from_slice(data.as_slice());
+                        normal_texture_count += 1;
+                        texture_buffer_index = 4;
+                    }
+                }
                 texture_info.push([
                     texture.width as u32,
                     texture.height as u32,
-                    texture_data.len() as u32,
+                    offset,
+                    texture_buffer_index,
                 ]);
-                texture_data.extend_from_slice(data.as_slice());
-            });
+            }
         } else {
-            texture_data.push(0);
-            texture_info.push([0, 0, 0]);
+            base_color_texture_data.push(0);
+            roughness_texture_data.push(0);
+            metallic_texture_data.push(0);
+            emission_texture_data.push(0);
+            normal_texture_data.push(0);
+            texture_info.push([0, 0, 0, 0]);
         }
-        let texture_data_buffer = Buffer::create_storage_buffer(device, 3, &texture_data);
-        let texture_info_buffer = Buffer::create_storage_buffer(device, 4, &texture_info);
+
+        if base_color_texture_count == 0 {
+            base_color_texture_data.push(0);
+        }
+        if roughness_texture_count == 0 {
+            roughness_texture_data.push(0);
+        }
+        if metallic_texture_count == 0 {
+            metallic_texture_data.push(0);
+        }
+        if emission_texture_count == 0 {
+            emission_texture_data.push(0);
+        }
+        if normal_texture_count == 0 {
+            normal_texture_data.push(0);
+        }
+
+        let base_color_texture_data_buffer =
+            Buffer::create_storage_buffer(device, 3, &base_color_texture_data);
+        let roughness_texture_data_buffer =
+            Buffer::create_storage_buffer(device, 4, &roughness_texture_data);
+        let metallic_texture_data_buffer =
+            Buffer::create_storage_buffer(device, 5, &metallic_texture_data);
+        let emission_texture_data_buffer =
+            Buffer::create_storage_buffer(device, 6, &emission_texture_data);
+        let normal_texture_data_buffer =
+            Buffer::create_storage_buffer(device, 7, &normal_texture_data);
+        let texture_info_buffer = Buffer::create_storage_buffer(device, 8, &texture_info);
         log_info!(
-            "Created a storage buffer for textures: {:.2} MB ({} textures)",
-            texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            scene.textures.len()
+            "Created a storage buffer for base color textures {:.2} MB ({} textures)",
+            base_color_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            base_color_texture_count
+        );
+        log_info!(
+            "Created a storage buffer for roughness textures {:.2} MB ({} textures)",
+            roughness_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            roughness_texture_count
+        );
+        log_info!(
+            "Created a storage buffer for metallic textures {:.2} MB ({} textures)",
+            metallic_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            metallic_texture_count
+        );
+        log_info!(
+            "Created a storage buffer for emission textures {:.2} MB ({} textures)",
+            emission_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            emission_texture_count
+        );
+        log_info!(
+            "Created a storage buffer for normal textures {:.2} MB ({} textures)",
+            normal_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
+            normal_texture_count
         );
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -375,7 +483,11 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_layout_entry,
                 bvh_buffer.bind_group_layout_entry,
                 material_buffer.bind_group_layout_entry,
-                texture_data_buffer.bind_group_layout_entry,
+                base_color_texture_data_buffer.bind_group_layout_entry,
+                roughness_texture_data_buffer.bind_group_layout_entry,
+                metallic_texture_data_buffer.bind_group_layout_entry,
+                emission_texture_data_buffer.bind_group_layout_entry,
+                normal_texture_data_buffer.bind_group_layout_entry,
                 texture_info_buffer.bind_group_layout_entry,
             ],
         });
@@ -387,7 +499,11 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_entry(),
                 bvh_buffer.bind_group_entry(),
                 material_buffer.bind_group_entry(),
-                texture_data_buffer.bind_group_entry(),
+                base_color_texture_data_buffer.bind_group_entry(),
+                roughness_texture_data_buffer.bind_group_entry(),
+                metallic_texture_data_buffer.bind_group_entry(),
+                emission_texture_data_buffer.bind_group_entry(),
+                normal_texture_data_buffer.bind_group_entry(),
                 texture_info_buffer.bind_group_entry(),
             ],
         });
@@ -398,7 +514,11 @@ impl StorageBuffers {
             triangle_buffer,
             bvh_buffer,
             material_buffer,
-            texture_data_buffer,
+            base_color_texture_data_buffer,
+            roughness_texture_data_buffer,
+            metallic_texture_data_buffer,
+            emission_texture_data_buffer,
+            normal_texture_data_buffer,
             texture_info_buffer,
         };
     }

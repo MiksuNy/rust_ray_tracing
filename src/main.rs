@@ -16,9 +16,9 @@ mod texture;
 
 const WIDTH: usize = 1920;
 const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 10000;
+const SAMPLE_COUNT: usize = 100;
 const MAX_BOUNCES: usize = 64;
-const OBJ_PATH: &str = "../res/many_dragons/many_dragons.obj";
+const OBJ_PATH: &str = "../res/damaged_helmet/damaged_helmet.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
@@ -38,9 +38,9 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = Vec3f::new(0.0, 0.0, 1.9);
-    camera.pitch = 0.0;
-    camera.yaw = 90.0;
+    camera.position = Vec3f::new(-11.204422, 2.1092458, -0.12164927);
+    camera.pitch = 1.5998944;
+    camera.yaw = -179.10223;
     scene.set_camera(camera);
 
     renderer.render(Rc::new(RefCell::new(scene)));

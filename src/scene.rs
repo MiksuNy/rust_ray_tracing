@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
 use crate::log_error;
@@ -10,7 +12,7 @@ use crate::texture::Texture;
 #[derive(Clone, Default)]
 pub struct Scene {
     pub tris: Vec<Triangle>,
-    pub materials: Vec<Material>,
+    pub materials: HashMap<String, Material>,
     pub textures: Vec<Texture>,
     pub bvh: BVH,
     pub camera: Camera,
@@ -128,42 +130,38 @@ impl Triangle {
 #[repr(C, align(16))]
 pub struct Material {
     pub base_color: Vec3f,
-    _pad1: [u8; 4],
-    pub specular_tint: Vec3f,
-    _pad2: [u8; 4],
-    pub emission: Vec3f,
     pub transmission: f32,
+    pub specular_tint: Vec3f,
     pub ior: f32,
+    pub emission: Vec3f,
     pub roughness: f32,
     pub metallic: f32,
     pub transparency: f32,
-    pub base_color_tex_id: u32,
-    pub emission_tex_id: u32,
-    pub transparency_tex_id: u32,
-    pub roughness_tex_id: u32,
-    pub metallic_tex_id: u32,
-    _pad3: [u8; 12],
+    /// byte 0: base color
+    /// byte 1: transparency
+    /// byte 2: roughness
+    /// byte 3: metallic
+    pub packed_tex_ids_1: u32,
+    /// byte 0: emission
+    /// byte 1: normal
+    /// byte 2: unused
+    /// byte 3: unused
+    pub packed_tex_ids_2: u32,
 }
 
 impl Default for Material {
     fn default() -> Self {
         return Self {
             base_color: Vec3f::from(0.8),
-            _pad1: [0; 4],
-            specular_tint: Vec3f::from(1.0),
-            _pad2: [0; 4],
-            emission: Vec3f::new(0.0, 0.0, 0.0),
             transmission: 0.0,
+            specular_tint: Vec3f::from(1.0),
             ior: 1.45,
+            emission: Vec3f::new(0.0, 0.0, 0.0),
             roughness: 1.0,
             metallic: 0.0,
             transparency: 1.0,
-            base_color_tex_id: u32::MAX,
-            emission_tex_id: u32::MAX,
-            transparency_tex_id: u32::MAX,
-            roughness_tex_id: u32::MAX,
-            metallic_tex_id: u32::MAX,
-            _pad3: [0; 12],
+            packed_tex_ids_1: u32::MAX,
+            packed_tex_ids_2: u32::MAX,
         };
     }
 }

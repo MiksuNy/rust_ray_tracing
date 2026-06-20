@@ -338,11 +338,10 @@ impl ApplicationHandler for App {
                     ));
                 }
 
-                let title = format!(
+                window.set_title(&format!(
                     "Path tracer | Current sample: {}",
                     state.renderer_info.curr_sample
-                );
-                window.set_title(&title);
+                ));
 
                 let camera = &mut scene.borrow_mut().camera;
 
