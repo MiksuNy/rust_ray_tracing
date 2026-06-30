@@ -39,6 +39,7 @@ pub fn parse(input: &str) -> Option<HashMap<String, Value>> {
         return None;
     }
     let tokens = lex(input);
+    log_info!("{:?}", tokens);
     return parse_tokens(tokens);
 }
 
@@ -262,13 +263,16 @@ fn lex(input: &str) -> Vec<Token> {
 }
 
 fn get_null(chars: &mut Peekable<Chars>) -> bool {
-    let string: String = chars
-        .take_while(|c| match c {
-            'a'..'z' => true,
-            _ => false,
-        })
-        .into_iter()
-        .collect();
+    let mut string = String::new();
+    while let Some(c) = chars.peek() {
+        match c {
+            'a'..='z' => {
+                string.push(*c);
+                chars.next();
+            }
+            _ => break,
+        }
+    }
     return match string.as_str() {
         "null" => true,
         _ => false,
@@ -276,13 +280,16 @@ fn get_null(chars: &mut Peekable<Chars>) -> bool {
 }
 
 fn get_boolean(chars: &mut Peekable<Chars>) -> Option<bool> {
-    let string: String = chars
-        .take_while(|c| match c {
-            'a'..'z' => true,
-            _ => false,
-        })
-        .into_iter()
-        .collect();
+    let mut string = String::new();
+    while let Some(c) = chars.peek() {
+        match c {
+            'a'..='z' => {
+                string.push(*c);
+                chars.next();
+            }
+            _ => break,
+        }
+    }
     return match string.as_str() {
         "true" => Some(true),
         "false" => Some(false),
