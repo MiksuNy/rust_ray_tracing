@@ -108,7 +108,7 @@ where
         match iter.peek() {
             Some(Token::RBrace) => {
                 iter.next();
-                break;
+                return Some(Value::Object(object));
             }
             Some(Token::String(name)) => {
                 iter.next();
@@ -120,13 +120,16 @@ where
                             match iter.peek() {
                                 Some(Token::RBrace) => {
                                     iter.next();
-                                    break;
+                                    return Some(Value::Object(object));
                                 }
                                 Some(Token::Comma) => {
                                     iter.next();
                                     continue;
                                 }
-                                None => break,
+                                None => {
+                                    log_error!("Invalid JSON, unexpected end of tokens");
+                                    return None;
+                                }
                                 token @ _ => {
                                     log_error!(
                                         "Invalid JSON, expected RBrace or Comma but found '{:?}'",
@@ -137,14 +140,20 @@ where
                             }
                         }
                     }
-                    None => break,
+                    None => {
+                        log_error!("Invalid JSON, unexpected end of tokens");
+                        return None;
+                    }
                     token @ _ => {
                         log_error!("Invalid JSON, expected Colon but found '{:?}'", token);
                         return None;
                     }
                 }
             }
-            None => break,
+            None => {
+                log_error!("Invalid JSON, unexpected end of tokens");
+                return None;
+            }
             token @ _ => {
                 log_error!(
                     "Invalid JSON, expected RBrace or String but found '{:?}'",
@@ -154,8 +163,6 @@ where
             }
         }
     }
-
-    return Some(Value::Object(object));
 }
 
 fn parse_array<'a, I>(iter: &mut Peekable<I>, depth: usize) -> Option<Value>
@@ -169,7 +176,7 @@ where
         match iter.peek() {
             Some(Token::RBracket) => {
                 iter.next();
-                break;
+                return Some(Value::Array(array));
             }
             Some(Token::String(_))
             | Some(Token::Number(_))
@@ -182,14 +189,39 @@ where
                     match iter.peek() {
                         Some(Token::Comma) => {
                             iter.next();
-                            continue;
+                            match iter.peek() {
+                                Some(Token::RBracket) => {
+                                    log_error!("Invalid JSON, expected a value but found RBracket");
+                                    return None;
+                                }
+                                None => {
+                                    log_error!("Invalid JSON, unexpected end of tokens");
+                                    return None;
+                                }
+                                _ => continue,
+                            }
                         }
-                        _ => {
+                        Some(Token::RBracket) => {
                             iter.next();
-                            break;
+                            return Some(Value::Array(array));
+                        }
+                        None => {
+                            log_error!("Invalid JSON, unexpected end of tokens");
+                            return None;
+                        }
+                        token @ _ => {
+                            log_error!(
+                                "Invalid JSON, expected Comma or RBracket but found '{:?}'",
+                                token
+                            );
+                            return None;
                         }
                     }
                 }
+            }
+            None => {
+                log_error!("Invalid JSON, unexpected end of tokens");
+                return None;
             }
             token @ _ => {
                 log_error!("Invalid JSON, expected a value but found '{:?}'", token);
@@ -197,8 +229,6 @@ where
             }
         }
     }
-
-    return Some(Value::Array(array));
 }
 
 fn lex(input: &str) -> Vec<Token> {
