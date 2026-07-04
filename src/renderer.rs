@@ -87,7 +87,6 @@ impl Renderer {
 
 impl Default for Renderer {
     fn default() -> Self {
-        log_info!("Using default renderer");
         return Self {
             options: RendererOptions::default(),
         };

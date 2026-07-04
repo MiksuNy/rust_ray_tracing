@@ -131,7 +131,7 @@ impl AppState {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: None,
-                    bind_group_layouts: &[&bind_group_layout],
+                    bind_group_layouts: &[Some(&bind_group_layout)],
                     immediate_size: 0,
                 });
         let render_pipeline =
@@ -190,6 +190,7 @@ impl AppState {
             height: self.size.height,
             desired_maximum_frame_latency: 1,
             present_mode: wgpu::PresentMode::AutoVsync,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         self.surface
             .configure(&self.state.as_ref().unwrap().device, &surface_config);
@@ -203,17 +204,19 @@ impl AppState {
     fn render(&mut self) {
         let state = self.state.as_mut().unwrap();
 
-        let surface_texture = self
-            .surface
-            .get_current_texture()
-            .expect("failed to acquire next swapchain texture");
-        let surface_texture_view =
-            surface_texture
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor {
-                    format: None,
-                    ..Default::default()
-                });
+        let surface_texture: wgpu::SurfaceTexture;
+        let surface_texture_view = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture) => {
+                surface_texture = texture;
+                surface_texture
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor {
+                        format: None,
+                        ..Default::default()
+                    })
+            }
+            _ => panic!("Failed to get next surface texture"),
+        };
 
         let mut command_encoder = state.device.create_command_encoder(&Default::default());
 
@@ -284,7 +287,7 @@ impl AppState {
 
         state.queue.submit([command_encoder.finish()]);
         self.window.pre_present_notify();
-        surface_texture.present();
+        state.queue.present(surface_texture);
     }
 }
 

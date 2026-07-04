@@ -84,7 +84,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         .poll(wgpu::PollType::wait_indefinitely())
         .unwrap();
     {
-        let view = buffer_slice.get_mapped_range();
+        let view = buffer_slice.get_mapped_range().unwrap();
         output_data.resize(view.len(), 0);
         output_data.copy_from_slice(&view[..]);
     }
@@ -169,9 +169,9 @@ impl State {
         let rt_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("rt_pipeline_layout"),
             bind_group_layouts: &[
-                &rt_texture_bind_group_layout,
-                &storage_buffers.bind_group_layout,
-                &uniform_buffers.bind_group_layout,
+                Some(&rt_texture_bind_group_layout),
+                Some(&storage_buffers.bind_group_layout),
+                Some(&uniform_buffers.bind_group_layout),
             ],
             immediate_size: 8,
         });
@@ -229,7 +229,10 @@ impl State {
 
         let pp_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pp_pipeline_layout"),
-            bind_group_layouts: &[&rt_texture_bind_group_layout, &pp_texture_bind_group_layout],
+            bind_group_layouts: &[
+                Some(&rt_texture_bind_group_layout),
+                Some(&pp_texture_bind_group_layout),
+            ],
             immediate_size: 0,
         });
 
@@ -269,11 +272,12 @@ impl State {
     }
 
     fn get_instance_and_adapter() -> (wgpu::Instance, wgpu::Adapter) {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             flags: wgpu::InstanceFlags::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions::default(),
+            display: None,
         });
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
