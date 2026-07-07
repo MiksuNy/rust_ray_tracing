@@ -1,5 +1,7 @@
+enable wgpu_binding_array;
+
 @group(0) @binding(0)
-var storage_texture: texture_storage_2d<rgba16unorm, read_write>;
+var output_texture: texture_storage_2d<rgba16unorm, read_write>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -11,22 +13,10 @@ var <storage, read> bvh_nodes: array<Node>;
 var <storage, read> materials: array<Material>;
 
 @group(1) @binding(3)
-var <storage, read> base_color_texture_data: array<u32>;
+var textures: binding_array<texture_2d<f32>, 128>;
 
 @group(1) @binding(4)
-var <storage, read> roughness_texture_data: array<u32>;
-
-@group(1) @binding(5)
-var <storage, read> metallic_texture_data: array<u32>;
-
-@group(1) @binding(6)
-var <storage, read> emission_texture_data: array<u32>;
-
-@group(1) @binding(7)
-var <storage, read> normal_texture_data: array<u32>;
-
-@group(1) @binding(8)
-var <storage, read> texture_info: array<TextureInfo>;
+var textures_array_sampler: sampler;
 
 @group(2) @binding(0)
 var <uniform> camera: Camera;
@@ -49,13 +39,6 @@ struct Camera {
     position: vec3<f32>,
 }
 
-struct TextureInfo {
-    width: u32,
-    height: u32,
-    data_offset: u32,
-    texture_buffer_index: u32,
-}
-
 struct Material {
     base_color: vec3<f32>,
     transmission: f32,
@@ -65,16 +48,12 @@ struct Material {
     roughness: f32,
     metallic: f32,
     transparency: f32,
-    // byte 0: base_color
-    // byte 1: transparency
-    // byte 2: roughness
-    // byte 3: metallic
-    packed_tex_ids_1: u32,
-    // byte 0: emission
-    // byte 1: normal
-    // byte 2: unused
-    // byte 3: unused
-    packed_tex_ids_2: u32,
+    base_color_tex_id: u32,
+    transparency_tex_id: u32,
+    roughness_tex_id: u32,
+    metallic_tex_id: u32,
+    emission_tex_id: u32,
+    normal_tex_id: u32,
 }
 
 struct Node {
@@ -123,24 +102,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
     let tex_coords = vec2<u32>(global_id.xy);
 
-    let texture_w = f32(textureDimensions(storage_texture).x);
-    let texture_h = f32(textureDimensions(storage_texture).y);
-    let aspect = texture_w / texture_h;
-    let screen_x = ((f32(global_id.x) / texture_w) * 2.0f - 1.0f) * aspect;
-    let screen_y = (f32(u32(texture_h) - global_id.y) / texture_h) * 2.0f - 1.0f;
+    let texture_dimensions = vec2<f32>(f32(textureDimensions(output_texture).x), f32(textureDimensions(output_texture).y));
+    let aspect = texture_dimensions.x / texture_dimensions.y;
+    let screen_coords = vec2<f32>(
+        ((f32(global_id.x) / texture_dimensions.x) * 2.0f - 1.0f) * aspect,
+        (f32(u32(texture_dimensions.y) - global_id.y) / texture_dimensions.y) * 2.0f - 1.0f
+    );
 
     var ray = Ray();
     ray.origin = camera.position;
-    let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0 - 1.0, rand_f32(&rng_seed) * 2.0 - 1.0) * 0.0005;
-    ray.direction = normalize(camera.look_at * vec4<f32>(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 0.0)).xyz;
+    let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0f - 1.0f, rand_f32(&rng_seed) * 2.0f - 1.0f) * 0.0005f;
+    ray.direction = normalize(camera.look_at * vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f)).xyz;
 
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    let accumulation_color = textureLoad(storage_texture, tex_coords).rgb;
+    let accumulation_color = textureLoad(output_texture, tex_coords).rgb;
     let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
     //let final_color = debug_bvh(ray, 300.0f);
 
-    textureStore(storage_texture, tex_coords, vec4<f32>(final_color, 1.0f));
+    textureStore(output_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
@@ -269,36 +249,33 @@ fn select_bsdf(material: Material, rng_seed: ptr<function, u32>) -> BSDFType {
 
 // Helper function to set actual material properties and other parameters of the hit surface
 fn set_surface_properties(hit_info: ptr<function, HitInfo>, hit_material: ptr<function, Material>) {
-    let unpacked_tex_ids_1 = unpack4xU8(hit_material.packed_tex_ids_1);
-    let unpacked_tex_ids_2 = unpack4xU8(hit_material.packed_tex_ids_2);
-
     if hit_info.front_face {
         (*hit_material).ior = 1.0f / (*hit_material).ior;
     }
 
     // Base color
-    if unpacked_tex_ids_1.x != 0xFF {
-        (*hit_material).base_color = sample_texture(unpacked_tex_ids_1.x, hit_info.uv).rgb;
+    if hit_material.base_color_tex_id != 0xFFFFFFFF {
+        (*hit_material).base_color = pow(sample_texture(hit_material.base_color_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
     }
 
     // Transparency
-    if unpacked_tex_ids_1.y != 0xFF {
-        (*hit_material).transparency = sample_texture(unpacked_tex_ids_1.y, hit_info.uv).a;
+    if hit_material.transparency_tex_id != 0xFFFFFFFF {
+        (*hit_material).transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
     }
 
     // Roughness
-    if unpacked_tex_ids_1.z != 0xFF {
-        (*hit_material).roughness = sample_texture(unpacked_tex_ids_1.z, hit_info.uv).r;
+    if hit_material.roughness_tex_id != 0xFFFFFFFF {
+        (*hit_material).roughness = sample_texture(hit_material.roughness_tex_id, hit_info.uv).g;
     }
 
     // Metallic
-    if unpacked_tex_ids_2.w != 0xFF {
-        (*hit_material).metallic = sample_texture(unpacked_tex_ids_1.w, hit_info.uv).g;
+    if hit_material.metallic_tex_id != 0xFFFFFFFF {
+        (*hit_material).metallic = sample_texture(hit_material.metallic_tex_id, hit_info.uv).b;
     }
 
     // Emission
-    if unpacked_tex_ids_1.x != 0xFF {
-        (*hit_material).emission = sample_texture(unpacked_tex_ids_2.x, hit_info.uv).rgb;
+    if hit_material.emission_tex_id != 0xFFFFFFFF {
+        (*hit_material).emission = pow(sample_texture(hit_material.emission_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
     }
 
     // Build ONB from geometric normal
@@ -307,8 +284,8 @@ fn set_surface_properties(hit_info: ptr<function, HitInfo>, hit_material: ptr<fu
     build_orthonormal_basis((*hit_info).normal, &tangent, &bitangent);
     (*hit_info).tbn = mat3x3<f32>(tangent, bitangent, (*hit_info).normal);
 
-    if unpacked_tex_ids_2.y != 0xFF {
-        (*hit_info).normal = normalize(to_world((*hit_info).tbn, sample_texture(unpacked_tex_ids_2.y, (*hit_info).uv).rgb * 2.0f - 1.0f));
+    if hit_material.normal_tex_id != 0xFFFFFFFF {
+        (*hit_info).normal = normalize(to_world((*hit_info).tbn, sample_texture(hit_material.normal_tex_id, (*hit_info).uv).rgb * 2.0f - 1.0f));
 
         // Rebuild ONB from texture normal
         build_orthonormal_basis((*hit_info).normal, &tangent, &bitangent);
@@ -520,33 +497,8 @@ fn rand_f32(input: ptr<function, u32>) -> f32 {
     return f32(xor_shift(input)) / f32(0xFFFFFFFF);
 }
 
-fn sample_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
-    let info = texture_info[texture_index];
-    let i: i32 = i32(fract(uv.x) * f32(info.width));
-    let j: i32 = i32(fract(uv.y) * f32(info.height));
-    let data_len = i32(info.width * info.height);
-    let index: i32 = i + j * i32(info.width) + i32(info.data_offset);
-    switch info.texture_buffer_index {
-        case 0: {
-            return unpack4x8unorm(base_color_texture_data[u32(index)]);
-        }
-        case 1: {
-            return vec4<f32>(f32(roughness_texture_data[u32(index)]));
-        }
-        case 2: {
-            return vec4<f32>(f32(metallic_texture_data[u32(index)]));
-        }
-        case 3: {
-            return vec4<f32>(f32(emission_texture_data[u32(index)]));
-        }
-        case 4: {
-            return unpack4x8unorm(normal_texture_data[u32(index)]);
-        }
-        // This should never happen but a default is required for switch statements
-        default: {
-            return vec4<f32>(1.0f, 0.0f, 1.0f, 1.0f);
-        }
-    }
+fn sample_texture(index: u32, uv: vec2<f32>) -> vec4<f32> {
+    return textureSampleLevel(textures[index], textures_array_sampler, uv, 0.0f);
 }
 
 fn sample_ggx_vndf(ve: vec3<f32>, ax: f32, ay: f32, rng_seed: ptr<function, u32>) -> vec3<f32> {

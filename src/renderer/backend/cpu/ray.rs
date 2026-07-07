@@ -159,18 +159,17 @@ impl Ray {
                     ior = hit_material.ior;
                 }
 
-                let unpacked_tex_ids_1 = hit_material.packed_tex_ids_1.to_le_bytes();
-
-                if unpacked_tex_ids_1[0] != u8::MAX {
+                if hit_material.base_color_tex_id != u32::MAX {
                     ray_color *= Vec3f::from(
-                        scene.textures[unpacked_tex_ids_1[0] as usize].color_at(hit_info.uv),
+                        scene.textures[hit_material.base_color_tex_id as usize]
+                            .color_at(hit_info.uv),
                     );
                 } else {
                     ray_color *= hit_material.base_color;
                 }
-                if unpacked_tex_ids_1[1] != u8::MAX {
+                if hit_material.emission_tex_id != u32::MAX {
                     emitted_light += Vec3f::from(
-                        scene.textures[unpacked_tex_ids_1[1] as usize].color_at(hit_info.uv),
+                        scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
                     );
                 } else {
                     emitted_light += hit_material.emission;

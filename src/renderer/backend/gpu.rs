@@ -2,12 +2,12 @@ use crate::{
     bvh::Node,
     log_info,
     math::{mat4::*, vec3::*},
-    renderer::Renderer,
+    renderer::{Renderer, backend::gpu::texture::Texture},
     scene::{Camera, Material, Scene, Triangle},
-    texture::TextureType,
 };
 
 mod buffer;
+mod texture;
 pub mod window;
 use buffer::Buffer;
 
@@ -115,7 +115,7 @@ impl State {
         let (instance, adapter) = Self::get_instance_and_adapter();
         let (device, queue) = Self::create_device_and_queue(&adapter);
 
-        let storage_buffers = StorageBuffers::new(&device, scene);
+        let storage_buffers = StorageBuffers::new(&device, &queue, scene);
         let uniform_buffers = UniformBuffers::new(&device, scene);
 
         let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -299,17 +299,19 @@ impl State {
             panic!("Adapter does not support compute shaders");
         }
 
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        return pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: None,
             required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                 | wgpu::Features::IMMEDIATES
-                | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
+                | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                | wgpu::Features::TEXTURE_BINDING_ARRAY
+                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
             required_limits: adapter.limits(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
         }))
-        .expect("Failed to create device")
+        .expect("Failed to create device");
     }
 }
 
@@ -320,16 +322,10 @@ struct StorageBuffers {
     triangle_buffer: Buffer,
     bvh_buffer: Buffer,
     material_buffer: Buffer,
-    base_color_texture_data_buffer: Buffer,
-    roughness_texture_data_buffer: Buffer,
-    metallic_texture_data_buffer: Buffer,
-    emission_texture_data_buffer: Buffer,
-    normal_texture_data_buffer: Buffer,
-    texture_info_buffer: Buffer,
 }
 
 impl StorageBuffers {
-    fn new(device: &wgpu::Device, scene: &Scene) -> Self {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> Self {
         let triangle_buffer = Buffer::create_storage_buffer(device, 0, &scene.tris);
         let bvh_buffer = Buffer::create_storage_buffer(device, 1, &scene.bvh.nodes);
         let material_buffer = Buffer::create_storage_buffer(
@@ -357,129 +353,62 @@ impl StorageBuffers {
             material_buffer.buffer.size() / size_of::<Material>() as u64
         );
 
-        let mut base_color_texture_data: Vec<u32> = Vec::new();
-        let mut base_color_texture_count: u8 = 0;
-        let mut roughness_texture_data: Vec<u32> = Vec::new();
-        let mut roughness_texture_count: u8 = 0;
-        let mut metallic_texture_data: Vec<u32> = Vec::new();
-        let mut metallic_texture_count: u8 = 0;
-        let mut emission_texture_data: Vec<u32> = Vec::new();
-        let mut emission_texture_count: u8 = 0;
-        let mut normal_texture_data: Vec<u32> = Vec::new();
-        let mut normal_texture_count: u8 = 0;
-        let mut texture_info: Vec<[u32; 4]> = Vec::new();
-        if !scene.textures.is_empty() {
-            for texture in scene.textures.iter() {
-                let data = texture.packed_data();
-
-                let offset: u32;
-                let texture_buffer_index: u32;
-                match texture.texture_type {
-                    TextureType::BaseColor => {
-                        offset = base_color_texture_data.len() as u32;
-                        base_color_texture_data.extend_from_slice(data.as_slice());
-                        base_color_texture_count += 1;
-                        texture_buffer_index = 0;
-                    }
-                    TextureType::Transparency => {
-                        offset = base_color_texture_data.len() as u32;
-                        base_color_texture_data.extend_from_slice(data.as_slice());
-                        base_color_texture_count += 1;
-                        texture_buffer_index = 0;
-                    }
-                    TextureType::Roughness => {
-                        offset = roughness_texture_data.len() as u32;
-                        roughness_texture_data.extend_from_slice(data.as_slice());
-                        roughness_texture_count += 1;
-                        texture_buffer_index = 1;
-                    }
-                    TextureType::Metallic => {
-                        offset = metallic_texture_data.len() as u32;
-                        metallic_texture_data.extend_from_slice(data.as_slice());
-                        metallic_texture_count += 1;
-                        texture_buffer_index = 2;
-                    }
-                    TextureType::Emission => {
-                        offset = emission_texture_data.len() as u32;
-                        emission_texture_data.extend_from_slice(data.as_slice());
-                        emission_texture_count += 1;
-                        texture_buffer_index = 3;
-                    }
-                    TextureType::Normal => {
-                        offset = normal_texture_data.len() as u32;
-                        normal_texture_data.extend_from_slice(data.as_slice());
-                        normal_texture_count += 1;
-                        texture_buffer_index = 4;
-                    }
-                }
-                texture_info.push([
+        let mut textures: Vec<Texture> = vec![];
+        if scene.textures.is_empty() {
+            textures.push(Texture::new(device, queue, 1, 1, &[255, 255, 255, 255]));
+        } else {
+            for texture in &scene.textures {
+                textures.push(Texture::new(
+                    device,
+                    queue,
                     texture.width as u32,
                     texture.height as u32,
-                    offset,
-                    texture_buffer_index,
-                ]);
+                    texture.pixel_data.as_flattened(),
+                ));
             }
-        } else {
-            base_color_texture_data.push(0);
-            roughness_texture_data.push(0);
-            metallic_texture_data.push(0);
-            emission_texture_data.push(0);
-            normal_texture_data.push(0);
-            texture_info.push([0, 0, 0, 0]);
+            log_info!(
+                "Created an array of textures, used {}/128 slots",
+                textures.len()
+            );
         }
+        let textures_array_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
+            binding: 3,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: std::num::NonZeroU32::new(textures.len() as u32),
+        };
+        let texture_views = textures
+            .iter()
+            .map(|texture| &texture.view)
+            .collect::<Vec<&wgpu::TextureView>>();
+        let textures_array_bind_group_entry = wgpu::BindGroupEntry {
+            binding: 3,
+            resource: wgpu::BindingResource::TextureViewArray(&texture_views),
+        };
 
-        if base_color_texture_count == 0 {
-            base_color_texture_data.push(0);
-        }
-        if roughness_texture_count == 0 {
-            roughness_texture_data.push(0);
-        }
-        if metallic_texture_count == 0 {
-            metallic_texture_data.push(0);
-        }
-        if emission_texture_count == 0 {
-            emission_texture_data.push(0);
-        }
-        if normal_texture_count == 0 {
-            normal_texture_data.push(0);
-        }
-
-        let base_color_texture_data_buffer =
-            Buffer::create_storage_buffer(device, 3, &base_color_texture_data);
-        let roughness_texture_data_buffer =
-            Buffer::create_storage_buffer(device, 4, &roughness_texture_data);
-        let metallic_texture_data_buffer =
-            Buffer::create_storage_buffer(device, 5, &metallic_texture_data);
-        let emission_texture_data_buffer =
-            Buffer::create_storage_buffer(device, 6, &emission_texture_data);
-        let normal_texture_data_buffer =
-            Buffer::create_storage_buffer(device, 7, &normal_texture_data);
-        let texture_info_buffer = Buffer::create_storage_buffer(device, 8, &texture_info);
-        log_info!(
-            "Created a storage buffer for base color textures {:.2} MB ({} textures)",
-            base_color_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            base_color_texture_count
-        );
-        log_info!(
-            "Created a storage buffer for roughness textures {:.2} MB ({} textures)",
-            roughness_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            roughness_texture_count
-        );
-        log_info!(
-            "Created a storage buffer for metallic textures {:.2} MB ({} textures)",
-            metallic_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            metallic_texture_count
-        );
-        log_info!(
-            "Created a storage buffer for emission textures {:.2} MB ({} textures)",
-            emission_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            emission_texture_count
-        );
-        log_info!(
-            "Created a storage buffer for normal textures {:.2} MB ({} textures)",
-            normal_texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            normal_texture_count
-        );
+        let textures_array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: None,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let textures_array_sampler_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
+            binding: 4,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
+        let textures_array_sampler_bind_group_entry = wgpu::BindGroupEntry {
+            binding: 4,
+            resource: wgpu::BindingResource::Sampler(&textures_array_sampler),
+        };
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -487,12 +416,8 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_layout_entry,
                 bvh_buffer.bind_group_layout_entry,
                 material_buffer.bind_group_layout_entry,
-                base_color_texture_data_buffer.bind_group_layout_entry,
-                roughness_texture_data_buffer.bind_group_layout_entry,
-                metallic_texture_data_buffer.bind_group_layout_entry,
-                emission_texture_data_buffer.bind_group_layout_entry,
-                normal_texture_data_buffer.bind_group_layout_entry,
-                texture_info_buffer.bind_group_layout_entry,
+                textures_array_bind_group_layout_entry,
+                textures_array_sampler_bind_group_layout_entry,
             ],
         });
 
@@ -503,12 +428,8 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_entry(),
                 bvh_buffer.bind_group_entry(),
                 material_buffer.bind_group_entry(),
-                base_color_texture_data_buffer.bind_group_entry(),
-                roughness_texture_data_buffer.bind_group_entry(),
-                metallic_texture_data_buffer.bind_group_entry(),
-                emission_texture_data_buffer.bind_group_entry(),
-                normal_texture_data_buffer.bind_group_entry(),
-                texture_info_buffer.bind_group_entry(),
+                textures_array_bind_group_entry,
+                textures_array_sampler_bind_group_entry,
             ],
         });
 
@@ -518,12 +439,6 @@ impl StorageBuffers {
             triangle_buffer,
             bvh_buffer,
             material_buffer,
-            base_color_texture_data_buffer,
-            roughness_texture_data_buffer,
-            metallic_texture_data_buffer,
-            emission_texture_data_buffer,
-            normal_texture_data_buffer,
-            texture_info_buffer,
         };
     }
 }

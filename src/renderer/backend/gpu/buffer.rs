@@ -14,7 +14,7 @@ impl Buffer {
         binding: u32,
         data: &[T],
     ) -> Self {
-        return Self {
+        Self {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(data),
@@ -31,7 +31,7 @@ impl Buffer {
                 count: None,
             },
             binding,
-        };
+        }
     }
 
     pub fn create_uniform_buffer<T: bytemuck::NoUninit>(
@@ -39,7 +39,7 @@ impl Buffer {
         binding: u32,
         data: &[T],
     ) -> Self {
-        return Self {
+        Self {
             buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(data),
@@ -56,7 +56,7 @@ impl Buffer {
                 count: None,
             },
             binding,
-        };
+        }
     }
 
     pub fn bind_group_entry<'a>(&'a self) -> wgpu::BindGroupEntry<'a> {

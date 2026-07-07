@@ -137,16 +137,12 @@ pub struct Material {
     pub roughness: f32,
     pub metallic: f32,
     pub transparency: f32,
-    /// byte 0: base color
-    /// byte 1: transparency
-    /// byte 2: roughness
-    /// byte 3: metallic
-    pub packed_tex_ids_1: u32,
-    /// byte 0: emission
-    /// byte 1: normal
-    /// byte 2: unused
-    /// byte 3: unused
-    pub packed_tex_ids_2: u32,
+    pub base_color_tex_id: u32,
+    pub transparency_tex_id: u32,
+    pub roughness_tex_id: u32,
+    pub metallic_tex_id: u32,
+    pub emission_tex_id: u32,
+    pub normal_tex_id: u32,
 }
 
 impl Default for Material {
@@ -160,8 +156,12 @@ impl Default for Material {
             roughness: 1.0,
             metallic: 0.0,
             transparency: 1.0,
-            packed_tex_ids_1: u32::MAX,
-            packed_tex_ids_2: u32::MAX,
+            base_color_tex_id: u32::MAX,
+            transparency_tex_id: u32::MAX,
+            roughness_tex_id: u32::MAX,
+            metallic_tex_id: u32::MAX,
+            emission_tex_id: u32::MAX,
+            normal_tex_id: u32::MAX,
         };
     }
 }

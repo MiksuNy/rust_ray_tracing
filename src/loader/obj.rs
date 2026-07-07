@@ -277,33 +277,33 @@ impl OBJ {
             }
         }
 
-        let tex_id: u8;
+        let tex_id: u32;
         if index == -1 {
             obj.textures.push(texture);
             log_info!("Loaded texture from '{}'", path);
-            tex_id = (obj.textures.len() - 1) as u8;
+            tex_id = (obj.textures.len() - 1) as u32;
         } else {
-            tex_id = index as u8;
+            tex_id = index as u32;
         }
 
         match texture_type {
             TextureType::BaseColor => {
-                material.packed_tex_ids_1 &= u32::from_le_bytes([tex_id, 0xFF, 0xFF, 0xFF]);
+                material.base_color_tex_id = tex_id;
             }
             TextureType::Transparency => {
-                material.packed_tex_ids_1 &= u32::from_le_bytes([0xFF, tex_id, 0xFF, 0xFF]);
+                material.transparency_tex_id = tex_id;
             }
             TextureType::Roughness => {
-                material.packed_tex_ids_1 &= u32::from_le_bytes([0xFF, 0xFF, tex_id, 0xFF]);
+                material.roughness_tex_id = tex_id;
             }
             TextureType::Metallic => {
-                material.packed_tex_ids_1 &= u32::from_le_bytes([0xFF, 0xFF, 0xFF, tex_id]);
+                material.metallic_tex_id = tex_id;
             }
             TextureType::Emission => {
-                material.packed_tex_ids_2 &= u32::from_le_bytes([tex_id, 0xFF, 0xFF, 0xFF]);
+                material.emission_tex_id = tex_id;
             }
             TextureType::Normal => {
-                material.packed_tex_ids_2 &= u32::from_le_bytes([0xFF, tex_id, 0xFF, 0xFF]);
+                material.normal_tex_id = tex_id;
             }
         }
     }
