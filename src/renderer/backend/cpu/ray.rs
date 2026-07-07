@@ -2,6 +2,7 @@ use crate::bvh::Node;
 use crate::math::vec::*;
 use crate::math::vec2::*;
 use crate::math::vec3::*;
+use crate::scene::Material;
 use crate::scene::{Scene, Triangle};
 
 #[derive(Clone, Copy)]
@@ -149,7 +150,8 @@ impl Ray {
             Self::traverse_bvh(ray, scene, &mut hit_info);
 
             if hit_info.has_hit {
-                let hit_material = &scene.materials[hit_info.material_id as usize];
+                let hit_material = &scene.materials.values().collect::<Vec<&Material>>()
+                    [hit_info.material_id as usize];
                 let ior: f32;
                 if hit_info.front_face {
                     ior = 1.0 / hit_material.ior;

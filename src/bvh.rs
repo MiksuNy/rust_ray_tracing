@@ -60,7 +60,7 @@ impl BVH {
         let parent_cost = node.num_tris as f32 * node.surface_area();
 
         // Surface area heuristic
-        const NUM_BINS: usize = 16;
+        const NUM_BINS: usize = 8;
         let mut best_split_axis: usize = 0;
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
@@ -95,14 +95,11 @@ impl BVH {
             return;
         }
 
-        let split_axis = best_split_axis;
-        let split_pos = best_split_pos;
-
         // Sort triangles
         let mut i: u32 = node.first_tri_or_child;
         let mut j: u32 = i + node.num_tris - 1;
         while i <= j {
-            if scene.tris[i as usize].bounds_mid().data[split_axis] < split_pos {
+            if scene.tris[i as usize].bounds_mid().data[best_split_axis] < best_split_pos {
                 i += 1;
             } else {
                 scene.tris.swap(i as usize, j as usize);

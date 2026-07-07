@@ -1,16 +1,15 @@
 use crate::{
     log_error, log_info, log_warning, math::vec::*, math::vec3::*, scene::Material,
-    texture::Texture,
+    texture::Texture, texture::TextureType,
 };
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Default)]
 pub struct OBJ {
     pub tris: Vec<Triangle>,
     pub vertex_buffer: VertexBuffer,
-    pub materials: Vec<Material>,
+    pub materials: HashMap<String, Material>,
     pub textures: Vec<Texture>,
-    material_names: Vec<String>,
 }
 
 impl OBJ {
@@ -37,12 +36,16 @@ impl OBJ {
                 log_warning!(
                     "An mtllib line was found but the corresponding .mtl file was not found, using default material for scene"
                 );
-                obj.materials = vec![Material::default()];
+                obj.materials = HashMap::new();
+                obj.materials
+                    .insert("default_material".into(), Material::default());
                 has_mtl = false;
             }
         } else {
             log_info!("No mtllib line found, using default material for scene");
-            obj.materials = vec![Material::default()];
+            obj.materials = HashMap::new();
+            obj.materials
+                .insert("default_material".into(), Material::default());
             has_mtl = false;
         }
 
@@ -76,7 +79,7 @@ impl OBJ {
                         if has_mtl {
                             let mtl_name = line.strip_prefix("usemtl ").unwrap();
                             let Some(mtl_id) =
-                                obj.material_names.iter().position(|name| name == mtl_name)
+                                obj.materials.iter().position(|(name, _)| name == mtl_name)
                             else {
                                 log_error!(
                                     "While trying to set a material id for triangles, material with name '{}' doesn't exist",
@@ -88,15 +91,11 @@ impl OBJ {
                         }
                     }
                     "f" => {
-                        let mut triangles =
+                        let triangles =
                             Triangle::from_str(line.strip_prefix("f ").unwrap()).unwrap();
-
-                        triangles.0.material_id = active_material_id;
-                        obj.tris.push(triangles.0);
-
-                        if let Some(mut other_triangle) = triangles.1 {
-                            other_triangle.material_id = active_material_id;
-                            obj.tris.push(other_triangle);
+                        for mut triangle in triangles {
+                            triangle.material_id = active_material_id;
+                            obj.tris.push(triangle);
                         }
                     }
                     _ => (),
@@ -104,7 +103,7 @@ impl OBJ {
             }
         }
 
-        // Precalculating vertex normals
+        // Precalculate vertex normals
         if obj.vertex_buffer.normals.is_empty() {
             for (i, tri) in obj.tris.iter_mut().enumerate() {
                 let v_1 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[0]]);
@@ -135,9 +134,10 @@ impl OBJ {
 
         while let Some(line) = lines.next() {
             if line.starts_with("newmtl ") {
-                let mut material = Material::default();
-                obj.material_names
-                    .push(line.strip_prefix("newmtl ").unwrap().to_string());
+                let mut new_material = (
+                    line.strip_prefix("newmtl ").unwrap().to_string(),
+                    Material::default(),
+                );
 
                 while let Some(line) = lines.next() {
                     let mut attribute = line.split_whitespace().into_iter();
@@ -149,35 +149,37 @@ impl OBJ {
                     match prefix {
                         "Kd" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                material.base_color.data[i] = val.parse().unwrap();
+                                new_material.1.base_color.data[i] = val.parse().unwrap();
                             });
                         }
                         "Ks" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                material.specular_tint.data[i] = val.parse().unwrap();
+                                new_material.1.specular_tint.data[i] = val.parse().unwrap();
                             });
                         }
                         "Ke" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                material.emission.data[i] = val.parse().unwrap();
+                                new_material.1.emission.data[i] = val.parse().unwrap();
                             });
                         }
                         "Ni" => {
-                            material.ior = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.ior = attribute.next().unwrap().parse().unwrap();
                         }
                         "Pr" => {
-                            material.roughness = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.roughness = attribute.next().unwrap().parse().unwrap();
                         }
                         "Pm" => {
-                            material.metallic = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.metallic = attribute.next().unwrap().parse().unwrap();
                         }
                         // NOTE: Blender exports "Tf" as a 3D vector, we only care about the
                         // first component. AFAIK the components are always the same.
                         "Tf" => {
-                            material.transmission = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.transmission =
+                                attribute.next().unwrap().parse().unwrap();
                         }
                         "d" => {
-                            material.transparency = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.transparency =
+                                attribute.next().unwrap().parse().unwrap();
                         }
                         "map_Kd" => {
                             if let Some(texture_path) =
@@ -186,20 +188,8 @@ impl OBJ {
                                 Self::load_texture(
                                     texture_path.as_str(),
                                     obj,
-                                    &mut material,
+                                    &mut new_material.1,
                                     TextureType::BaseColor,
-                                );
-                            }
-                        }
-                        "map_Ke" => {
-                            if let Some(texture_path) =
-                                Self::get_resource_path(path, attribute.next().unwrap())
-                            {
-                                Self::load_texture(
-                                    texture_path.as_str(),
-                                    obj,
-                                    &mut material,
-                                    TextureType::Emission,
                                 );
                             }
                         }
@@ -210,7 +200,7 @@ impl OBJ {
                                 Self::load_texture(
                                     texture_path.as_str(),
                                     obj,
-                                    &mut material,
+                                    &mut new_material.1,
                                     TextureType::Transparency,
                                 );
                             }
@@ -222,7 +212,7 @@ impl OBJ {
                                 Self::load_texture(
                                     texture_path.as_str(),
                                     obj,
-                                    &mut material,
+                                    &mut new_material.1,
                                     TextureType::Roughness,
                                 );
                             }
@@ -234,8 +224,34 @@ impl OBJ {
                                 Self::load_texture(
                                     texture_path.as_str(),
                                     obj,
-                                    &mut material,
+                                    &mut new_material.1,
                                     TextureType::Metallic,
+                                );
+                            }
+                        }
+                        "map_Ke" => {
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.next().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut new_material.1,
+                                    TextureType::Emission,
+                                );
+                            }
+                        }
+                        "map_Bump" => {
+                            // NOTE: Using .last() here because Blender also
+                            // exports "bm" (bump map strength?) as a parameter but we don't use it
+                            if let Some(texture_path) =
+                                Self::get_resource_path(path, attribute.last().unwrap())
+                            {
+                                Self::load_texture(
+                                    texture_path.as_str(),
+                                    obj,
+                                    &mut new_material.1,
+                                    TextureType::Normal,
                                 );
                             }
                         }
@@ -243,13 +259,13 @@ impl OBJ {
                     }
                 }
 
-                obj.materials.push(material);
+                obj.materials.insert(new_material.0, new_material.1);
             }
         }
     }
 
     fn load_texture(path: &str, obj: &mut OBJ, material: &mut Material, texture_type: TextureType) {
-        let Some(texture) = Texture::load(path) else {
+        let Some(texture) = Texture::load(path, texture_type) else {
             return;
         };
 
@@ -274,9 +290,6 @@ impl OBJ {
             TextureType::BaseColor => {
                 material.base_color_tex_id = tex_id;
             }
-            TextureType::Emission => {
-                material.emission_tex_id = tex_id;
-            }
             TextureType::Transparency => {
                 material.transparency_tex_id = tex_id;
             }
@@ -285,6 +298,12 @@ impl OBJ {
             }
             TextureType::Metallic => {
                 material.metallic_tex_id = tex_id;
+            }
+            TextureType::Emission => {
+                material.emission_tex_id = tex_id;
+            }
+            TextureType::Normal => {
+                material.normal_tex_id = tex_id;
             }
         }
     }
@@ -313,15 +332,7 @@ impl OBJ {
     }
 }
 
-enum TextureType {
-    BaseColor,
-    Emission,
-    Transparency,
-    Roughness,
-    Metallic,
-}
-
-/// Used to build final scene triangles from .obj triangles
+/// Used to build final scene triangles from OBJ triangles
 #[derive(Default)]
 pub struct VertexBuffer {
     pub positions: Vec<[f32; 3]>,
@@ -339,7 +350,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    pub fn from_str(s: &str) -> Result<(Self, Option<Self>), ()> {
+    pub fn from_str(s: &str) -> Result<Vec<Self>, ()> {
         // NOTE: Triangles may be specified with negative indices. I don't see a reason to support
         // this since AFAIK Blender doesn't do this either.
         let read_index = |index_str: &str| -> usize {
@@ -350,7 +361,7 @@ impl Triangle {
             return index as usize;
         };
 
-        let triangle_from_index_groups = |index_groups: Vec<&str>| -> Self {
+        let triangle_from_index_groups = |index_groups: &[&str; 3]| -> Self {
             let mut triangle = Triangle::default();
 
             for (group_id, group) in index_groups.iter().enumerate() {
@@ -389,23 +400,38 @@ impl Triangle {
             return triangle;
         };
 
-        // 3 = one triangle
-        // 4 = one quad split into two triangles
         let index_groups = s.split_whitespace().collect::<Vec<&str>>();
         match index_groups.len() {
+            // triangle
             3 => {
-                return Ok((triangle_from_index_groups(index_groups), None));
+                return Ok(vec![triangle_from_index_groups(&[
+                    index_groups[0],
+                    index_groups[1],
+                    index_groups[2],
+                ])]);
             }
+            // quad
             4 => {
-                let index_groups_1 = vec![index_groups[0], index_groups[1], index_groups[3]];
-                let index_groups_2 = vec![index_groups[1], index_groups[2], index_groups[3]];
-
-                return Ok((
-                    triangle_from_index_groups(index_groups_1),
-                    Some(triangle_from_index_groups(index_groups_2)),
-                ));
+                let index_groups_1 = [index_groups[0], index_groups[1], index_groups[3]];
+                let index_groups_2 = [index_groups[1], index_groups[2], index_groups[3]];
+                return Ok(vec![
+                    triangle_from_index_groups(&index_groups_1),
+                    triangle_from_index_groups(&index_groups_2),
+                ]);
             }
-            _ => return Err(()),
+            // n-gon
+            5.. => {
+                let mut triangles: Vec<Self> = vec![];
+                for i in 0..index_groups.len() - 2 {
+                    triangles.push(triangle_from_index_groups(&[
+                        index_groups[0],
+                        index_groups[i + 1],
+                        index_groups[i + 2],
+                    ]));
+                }
+                return Ok(triangles);
+            }
+            _ => Err(()),
         }
     }
 }

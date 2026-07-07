@@ -2,11 +2,12 @@ use crate::{
     bvh::Node,
     log_info,
     math::{mat4::*, vec3::*},
-    renderer::Renderer,
+    renderer::{Renderer, backend::gpu::texture::Texture},
     scene::{Camera, Material, Scene, Triangle},
 };
 
 mod buffer;
+mod texture;
 pub mod window;
 use buffer::Buffer;
 
@@ -83,7 +84,7 @@ pub async fn render_scene_to_buffer(renderer: Renderer, scene: &Scene) -> Vec<u8
         .poll(wgpu::PollType::wait_indefinitely())
         .unwrap();
     {
-        let view = buffer_slice.get_mapped_range();
+        let view = buffer_slice.get_mapped_range().unwrap();
         output_data.resize(view.len(), 0);
         output_data.copy_from_slice(&view[..]);
     }
@@ -114,7 +115,7 @@ impl State {
         let (instance, adapter) = Self::get_instance_and_adapter();
         let (device, queue) = Self::create_device_and_queue(&adapter);
 
-        let storage_buffers = StorageBuffers::new(&device, scene);
+        let storage_buffers = StorageBuffers::new(&device, &queue, scene);
         let uniform_buffers = UniformBuffers::new(&device, scene);
 
         let output_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -168,9 +169,9 @@ impl State {
         let rt_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("rt_pipeline_layout"),
             bind_group_layouts: &[
-                &rt_texture_bind_group_layout,
-                &storage_buffers.bind_group_layout,
-                &uniform_buffers.bind_group_layout,
+                Some(&rt_texture_bind_group_layout),
+                Some(&storage_buffers.bind_group_layout),
+                Some(&uniform_buffers.bind_group_layout),
             ],
             immediate_size: 8,
         });
@@ -228,7 +229,10 @@ impl State {
 
         let pp_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pp_pipeline_layout"),
-            bind_group_layouts: &[&rt_texture_bind_group_layout, &pp_texture_bind_group_layout],
+            bind_group_layouts: &[
+                Some(&rt_texture_bind_group_layout),
+                Some(&pp_texture_bind_group_layout),
+            ],
             immediate_size: 0,
         });
 
@@ -268,11 +272,12 @@ impl State {
     }
 
     fn get_instance_and_adapter() -> (wgpu::Instance, wgpu::Adapter) {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             flags: wgpu::InstanceFlags::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions::default(),
+            display: None,
         });
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
@@ -294,17 +299,19 @@ impl State {
             panic!("Adapter does not support compute shaders");
         }
 
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        return pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: None,
             required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                 | wgpu::Features::IMMEDIATES
-                | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
+                | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                | wgpu::Features::TEXTURE_BINDING_ARRAY
+                | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
             required_limits: adapter.limits(),
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
         }))
-        .expect("Failed to create device")
+        .expect("Failed to create device");
     }
 }
 
@@ -315,15 +322,21 @@ struct StorageBuffers {
     triangle_buffer: Buffer,
     bvh_buffer: Buffer,
     material_buffer: Buffer,
-    texture_data_buffer: Buffer,
-    texture_info_buffer: Buffer,
 }
 
 impl StorageBuffers {
-    fn new(device: &wgpu::Device, scene: &Scene) -> Self {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> Self {
         let triangle_buffer = Buffer::create_storage_buffer(device, 0, &scene.tris);
         let bvh_buffer = Buffer::create_storage_buffer(device, 1, &scene.bvh.nodes);
-        let material_buffer = Buffer::create_storage_buffer(device, 2, &scene.materials);
+        let material_buffer = Buffer::create_storage_buffer(
+            device,
+            2,
+            &scene
+                .materials
+                .clone()
+                .into_values()
+                .collect::<Vec<Material>>(),
+        );
         log_info!(
             "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
             triangle_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
@@ -339,35 +352,63 @@ impl StorageBuffers {
             material_buffer.buffer.size() as f32 / 1024.0,
             material_buffer.buffer.size() / size_of::<Material>() as u64
         );
-        let mut texture_data: Vec<u32> = Vec::new();
-        let mut texture_info: Vec<[u32; 3]> = Vec::new();
-        if !scene.textures.is_empty() {
-            scene.textures.iter().for_each(|texture| {
-                let data = texture
-                    .pixel_data
-                    .iter()
-                    .map(|bytes| {
-                        return u32::from_le_bytes(*bytes);
-                    })
-                    .collect::<Vec<u32>>();
-                texture_info.push([
+
+        let mut textures: Vec<Texture> = vec![];
+        if scene.textures.is_empty() {
+            textures.push(Texture::new(device, queue, 1, 1, &[255, 255, 255, 255]));
+        } else {
+            for texture in &scene.textures {
+                textures.push(Texture::new(
+                    device,
+                    queue,
                     texture.width as u32,
                     texture.height as u32,
-                    texture_data.len() as u32,
-                ]);
-                texture_data.extend_from_slice(data.as_slice());
-            });
-        } else {
-            texture_data.push(0);
-            texture_info.push([0, 0, 0]);
+                    texture.pixel_data.as_flattened(),
+                ));
+            }
+            log_info!(
+                "Created an array of textures, used {}/128 slots",
+                textures.len()
+            );
         }
-        let texture_data_buffer = Buffer::create_storage_buffer(device, 3, &texture_data);
-        let texture_info_buffer = Buffer::create_storage_buffer(device, 4, &texture_info);
-        log_info!(
-            "Created a storage buffer for textures: {:.2} MB ({} textures)",
-            texture_data_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
-            scene.textures.len()
-        );
+        let textures_array_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
+            binding: 3,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: std::num::NonZeroU32::new(textures.len() as u32),
+        };
+        let texture_views = textures
+            .iter()
+            .map(|texture| &texture.view)
+            .collect::<Vec<&wgpu::TextureView>>();
+        let textures_array_bind_group_entry = wgpu::BindGroupEntry {
+            binding: 3,
+            resource: wgpu::BindingResource::TextureViewArray(&texture_views),
+        };
+
+        let textures_array_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: None,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let textures_array_sampler_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
+            binding: 4,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
+        let textures_array_sampler_bind_group_entry = wgpu::BindGroupEntry {
+            binding: 4,
+            resource: wgpu::BindingResource::Sampler(&textures_array_sampler),
+        };
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -375,8 +416,8 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_layout_entry,
                 bvh_buffer.bind_group_layout_entry,
                 material_buffer.bind_group_layout_entry,
-                texture_data_buffer.bind_group_layout_entry,
-                texture_info_buffer.bind_group_layout_entry,
+                textures_array_bind_group_layout_entry,
+                textures_array_sampler_bind_group_layout_entry,
             ],
         });
 
@@ -387,8 +428,8 @@ impl StorageBuffers {
                 triangle_buffer.bind_group_entry(),
                 bvh_buffer.bind_group_entry(),
                 material_buffer.bind_group_entry(),
-                texture_data_buffer.bind_group_entry(),
-                texture_info_buffer.bind_group_entry(),
+                textures_array_bind_group_entry,
+                textures_array_sampler_bind_group_entry,
             ],
         });
 
@@ -398,8 +439,6 @@ impl StorageBuffers {
             triangle_buffer,
             bvh_buffer,
             material_buffer,
-            texture_data_buffer,
-            texture_info_buffer,
         };
     }
 }
