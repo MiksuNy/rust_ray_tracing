@@ -24,7 +24,10 @@ Todo (in order of priority)
 
 Gallery
 --------
-Models from https://benedikt-bitterli.me/resources/
+Damaged helmet model from https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/DamagedHelmet
+![](damaged_helmet.png)
+--------
+Car and dragon models from https://benedikt-bitterli.me/resources/
 ![](car_with_red_blue_lights.png)
 ![](dragon_orange_translucent.png)
 --------
