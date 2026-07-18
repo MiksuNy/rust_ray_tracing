@@ -1,6 +1,9 @@
 use crate::{
     log_info,
-    math::vec3::*,
+    math::{
+        vec::{Max, Min},
+        vec3::*,
+    },
     scene::{Scene, Triangle},
 };
 
@@ -64,24 +67,24 @@ impl BVH {
         let mut best_split_axis: usize = 0;
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
+
+        let mut centroid_extent = (Vec3f::from(f32::MAX), Vec3f::from(f32::MIN));
+        for i in 0..node.num_tris {
+            let tri = scene.tris[(node.first_tri_or_child + i) as usize];
+            let tri_bounds_mid = tri.bounds_mid();
+            centroid_extent.0 = Vec3f::min(centroid_extent.0, tri_bounds_mid);
+            centroid_extent.1 = Vec3f::max(centroid_extent.1, tri_bounds_mid);
+        }
+
         for split_axis in 0..3 {
-            let mut centroid_bounds_min = f32::MAX;
-            let mut centroid_bounds_max = f32::MIN;
-            for i in 0..node.num_tris {
-                let tri = scene.tris[(node.first_tri_or_child + i) as usize];
-                let tri_bounds_mid = tri.bounds_mid();
-                centroid_bounds_min =
-                    f32::min(centroid_bounds_min, tri_bounds_mid.data[split_axis]);
-                centroid_bounds_max =
-                    f32::max(centroid_bounds_max, tri_bounds_mid.data[split_axis]);
-            }
-            if centroid_bounds_min == centroid_bounds_max {
+            if centroid_extent.0.data[split_axis] == centroid_extent.1.data[split_axis] {
                 continue;
             }
 
-            let scale = (centroid_bounds_max - centroid_bounds_min) / NUM_BINS as f32;
-            for i in 1..NUM_BINS {
-                let split_pos = centroid_bounds_min + i as f32 * scale;
+            let scale = (centroid_extent.1.data[split_axis] - centroid_extent.0.data[split_axis])
+                / NUM_BINS as f32;
+            for i in 0..NUM_BINS {
+                let split_pos = centroid_extent.0.data[split_axis] + i as f32 * scale;
                 let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
                 if split_cost < best_split_cost {
                     best_split_axis = split_axis;
@@ -107,29 +110,29 @@ impl BVH {
             }
         }
 
-        let a_count = i - node.first_tri_or_child;
-        if a_count == 0 || a_count == node.num_tris {
+        let left_count = i - node.first_tri_or_child;
+        if left_count == 0 || left_count == node.num_tris {
             return;
         }
 
-        let mut a = Node::default();
-        let mut b = Node::default();
-        a.first_tri_or_child = node.first_tri_or_child;
-        a.num_tris = a_count;
-        b.first_tri_or_child = i;
-        b.num_tris = node.num_tris - a_count;
+        let mut left = Node::default();
+        let mut right = Node::default();
+        left.first_tri_or_child = node.first_tri_or_child;
+        left.num_tris = left_count;
+        right.first_tri_or_child = i;
+        right.num_tris = node.num_tris - left_count;
         node.first_tri_or_child = used_nodes;
         node.num_tris = 0;
 
-        for i in 0..a.num_tris {
-            a.grow_by_tri(&scene.tris[(a.first_tri_or_child + i) as usize]);
+        for i in 0..left.num_tris {
+            left.grow_by_tri(&scene.tris[(left.first_tri_or_child + i) as usize]);
         }
-        for i in 0..b.num_tris {
-            b.grow_by_tri(&scene.tris[(b.first_tri_or_child + i) as usize]);
+        for i in 0..right.num_tris {
+            right.grow_by_tri(&scene.tris[(right.first_tri_or_child + i) as usize]);
         }
 
-        bvh.nodes.push(a);
-        bvh.nodes.push(b);
+        bvh.nodes.push(left);
+        bvh.nodes.push(right);
 
         Self::split_node(used_nodes as usize, bvh, scene);
         Self::split_node((used_nodes + 1) as usize, bvh, scene);
@@ -181,20 +184,48 @@ impl Default for Node {
     }
 }
 
-impl Node {
+impl AABB for Node {
+    fn bounds(&self) -> (Vec3f, Vec3f) {
+        (self.bounds_min, self.bounds_max)
+    }
+
+    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f) {
+        (&mut self.bounds_min, &mut self.bounds_max)
+    }
+}
+
+impl AABB for (Vec3f, Vec3f) {
+    fn bounds(&self) -> (Vec3f, Vec3f) {
+        (self.0, self.1)
+    }
+
+    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f) {
+        (&mut self.0, &mut self.1)
+    }
+}
+
+trait AABB {
+    fn bounds(&self) -> (Vec3f, Vec3f);
+
+    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f);
+
     fn grow_by_tri(&mut self, tri: &Triangle) {
         for vertex in tri.vertices {
-            for i in 0..3 {
-                self.bounds_min.data[i] =
-                    f32::min(self.bounds_min.data[i], vertex.position.data[i]);
-                self.bounds_max.data[i] =
-                    f32::max(self.bounds_max.data[i], vertex.position.data[i]);
-            }
+            *self.bounds_mut().0 = Vec3f::min(self.bounds().0, vertex.position);
+            *self.bounds_mut().1 = Vec3f::max(self.bounds().1, vertex.position);
         }
     }
 
+    fn grow_by_aabb<T>(&mut self, other: T)
+    where
+        T: AABB,
+    {
+        *self.bounds_mut().0 = Vec3f::min(self.bounds().0, other.bounds().0);
+        *self.bounds_mut().1 = Vec3f::max(self.bounds().1, other.bounds().1);
+    }
+
     fn extent(&self) -> Vec3f {
-        return self.bounds_max - self.bounds_min;
+        self.bounds().1 - self.bounds().0
     }
 
     fn surface_area(&self) -> f32 {
