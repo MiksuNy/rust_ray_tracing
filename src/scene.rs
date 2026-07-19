@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::bvh::AABB;
 use crate::bvh::BVH;
 use crate::loader::obj::OBJ;
 use crate::log_error;
@@ -112,17 +113,9 @@ impl Triangle {
     }
 
     pub fn bounds_mid(&self) -> Vec3f {
-        let mut bounds_min = Vec3f::from(f32::MAX);
-        let mut bounds_max = Vec3f::from(-f32::MAX);
-
-        for vertex in self.vertices {
-            for i in 0..3 {
-                bounds_min.data[i] = f32::min(bounds_min.data[i], vertex.position.data[i]);
-                bounds_max.data[i] = f32::max(bounds_max.data[i], vertex.position.data[i]);
-            }
-        }
-
-        return (bounds_min + bounds_max) / 2.0;
+        let mut bounds = (Vec3f::from(f32::MAX), Vec3f::from(f32::MIN));
+        bounds.grow_by_tri(self);
+        return (bounds.0 + bounds.1) / 2.0;
     }
 }
 

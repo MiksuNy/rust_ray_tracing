@@ -204,7 +204,7 @@ impl AABB for (Vec3f, Vec3f) {
     }
 }
 
-trait AABB {
+pub trait AABB {
     fn bounds(&self) -> (Vec3f, Vec3f);
 
     fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f);
