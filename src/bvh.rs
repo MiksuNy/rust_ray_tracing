@@ -83,7 +83,7 @@ impl BVH {
 
             let scale = (centroid_extent.1.data[split_axis] - centroid_extent.0.data[split_axis])
                 / NUM_BINS as f32;
-            for i in 0..NUM_BINS {
+            for i in 1..NUM_BINS {
                 let split_pos = centroid_extent.0.data[split_axis] + i as f32 * scale;
                 let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
                 if split_cost < best_split_cost {
