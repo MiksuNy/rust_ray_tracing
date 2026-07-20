@@ -79,7 +79,7 @@ impl From<OBJ> for Scene {
         scene.materials = obj.materials;
         scene.textures = obj.textures;
 
-        BVH::build(&mut scene);
+        BVH::build(&mut scene, false);
 
         return scene;
     }
@@ -112,10 +112,10 @@ impl Triangle {
         };
     }
 
-    pub fn bounds_mid(&self) -> Vec3f {
+    pub fn bounds(&self) -> (Vec3f, Vec3f) {
         let mut bounds = (Vec3f::from(f32::MAX), Vec3f::from(f32::MIN));
         bounds.grow_by_tri(self);
-        return (bounds.0 + bounds.1) / 2.0;
+        return (bounds.0, bounds.1);
     }
 }
 

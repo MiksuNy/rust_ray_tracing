@@ -1,5 +1,5 @@
 use crate::{
-    log_info,
+    log_info, log_warning,
     math::{
         vec::{Max, Min},
         vec3::*,
@@ -13,20 +13,30 @@ pub struct BVH {
 }
 
 impl BVH {
-    pub fn build(scene: &mut Scene) {
+    pub fn build(scene: &mut Scene, enable_presplitting: bool) {
         log_info!("Building BVH for scene");
 
         let start_time = std::time::Instant::now();
 
+        let mut primitives: Vec<(Vec3f, Vec3f)> = vec![];
+        primitives.reserve_exact(scene.tris.len());
+        if enable_presplitting {
+            unimplemented!();
+        } else {
+            for tri in &scene.tris {
+                primitives.push(tri.bounds());
+            }
+        }
+
         let mut bvh = Self::default();
         let mut root = Node::default();
-        for tri in &scene.tris {
-            root.grow_by_tri(tri);
+        for i in 0..primitives.len() {
+            root.grow_by_aabb(&primitives[i]);
         }
-        root.num_tris = scene.tris.len() as u32;
+        root.num_tris = primitives.len() as u32;
         bvh.nodes.push(root);
 
-        Self::split_node(0, &mut bvh, scene);
+        Self::split_node(0, &mut bvh, &mut primitives, scene);
 
         let mut leaf_node_count: u32 = 0;
         let mut avg_tri_count: f32 = 0.0;
@@ -56,24 +66,28 @@ impl BVH {
         scene.bvh = bvh;
     }
 
-    fn split_node(index: usize, bvh: &mut Self, scene: &mut Scene) {
+    fn split_node(
+        index: usize,
+        bvh: &mut Self,
+        primitives: &mut [(Vec3f, Vec3f)],
+        scene: &mut Scene,
+    ) {
         let used_nodes = bvh.nodes.len() as u32;
         let node = bvh.nodes.get_mut(index).unwrap();
 
         let parent_cost = node.num_tris as f32 * node.surface_area();
 
-        // Surface area heuristic
-        const NUM_BINS: usize = 8;
+        const NUM_BINS: usize = 16;
         let mut best_split_axis: usize = 0;
         let mut best_split_pos: f32 = 0.0;
         let mut best_split_cost: f32 = f32::MAX;
 
         let mut centroid_extent = (Vec3f::from(f32::MAX), Vec3f::from(f32::MIN));
         for i in 0..node.num_tris {
-            let tri = scene.tris[(node.first_tri_or_child + i) as usize];
-            let tri_bounds_mid = tri.bounds_mid();
-            centroid_extent.0 = Vec3f::min(centroid_extent.0, tri_bounds_mid);
-            centroid_extent.1 = Vec3f::max(centroid_extent.1, tri_bounds_mid);
+            let primitive = primitives[(node.first_tri_or_child + i) as usize];
+            let primitive_bounds_center = primitive.center();
+            centroid_extent.0 = Vec3f::min(centroid_extent.0, primitive_bounds_center);
+            centroid_extent.1 = Vec3f::max(centroid_extent.1, primitive_bounds_center);
         }
 
         for split_axis in 0..3 {
@@ -85,7 +99,7 @@ impl BVH {
                 / NUM_BINS as f32;
             for i in 1..NUM_BINS {
                 let split_pos = centroid_extent.0.data[split_axis] + i as f32 * scale;
-                let split_cost = Self::evaluate_sah(scene, node, split_axis, split_pos);
+                let split_cost = Self::evaluate_sah(node, primitives, split_axis, split_pos);
                 if split_cost < best_split_cost {
                     best_split_axis = split_axis;
                     best_split_pos = split_pos;
@@ -102,9 +116,10 @@ impl BVH {
         let mut i: u32 = node.first_tri_or_child;
         let mut j: u32 = i + node.num_tris - 1;
         while i <= j {
-            if scene.tris[i as usize].bounds_mid().data[best_split_axis] < best_split_pos {
+            if primitives[i as usize].center().data[best_split_axis] < best_split_pos {
                 i += 1;
             } else {
+                primitives.swap(i as usize, j as usize);
                 scene.tris.swap(i as usize, j as usize);
                 j -= 1;
             }
@@ -125,30 +140,35 @@ impl BVH {
         node.num_tris = 0;
 
         for i in 0..left.num_tris {
-            left.grow_by_tri(&scene.tris[(left.first_tri_or_child + i) as usize]);
+            left.grow_by_aabb(&primitives[(left.first_tri_or_child + i) as usize]);
         }
         for i in 0..right.num_tris {
-            right.grow_by_tri(&scene.tris[(right.first_tri_or_child + i) as usize]);
+            right.grow_by_aabb(&primitives[(right.first_tri_or_child + i) as usize]);
         }
 
         bvh.nodes.push(left);
         bvh.nodes.push(right);
 
-        Self::split_node(used_nodes as usize, bvh, scene);
-        Self::split_node((used_nodes + 1) as usize, bvh, scene);
+        Self::split_node(used_nodes as usize, bvh, primitives, scene);
+        Self::split_node((used_nodes + 1) as usize, bvh, primitives, scene);
     }
 
-    fn evaluate_sah(scene: &Scene, node: &Node, split_axis: usize, split_pos: f32) -> f32 {
+    fn evaluate_sah(
+        node: &Node,
+        primitives: &[(Vec3f, Vec3f)],
+        split_axis: usize,
+        split_pos: f32,
+    ) -> f32 {
         let mut left = Node::default();
         let mut right = Node::default();
 
         for i in 0..node.num_tris {
-            let tri = &scene.tris[(node.first_tri_or_child + i) as usize];
-            if tri.bounds_mid().data[split_axis] < split_pos {
-                left.grow_by_tri(tri);
+            let primitive = &primitives[(node.first_tri_or_child + i) as usize];
+            if primitive.center().data[split_axis] < split_pos {
+                left.grow_by_aabb(primitive);
                 left.num_tris += 1;
             } else {
-                right.grow_by_tri(tri);
+                right.grow_by_aabb(primitive);
                 right.num_tris += 1;
             }
         }
@@ -216,7 +236,7 @@ pub trait AABB {
         }
     }
 
-    fn grow_by_aabb<T>(&mut self, other: T)
+    fn grow_by_aabb<T>(&mut self, other: &T)
     where
         T: AABB,
     {
@@ -231,5 +251,9 @@ pub trait AABB {
     fn surface_area(&self) -> f32 {
         let extent = self.extent();
         return (extent.x() * extent.z()) + (extent.x() * extent.y()) + (extent.z() * extent.y());
+    }
+
+    fn center(&self) -> Vec3f {
+        (self.bounds().0 + self.bounds().1) / 2.0
     }
 }
