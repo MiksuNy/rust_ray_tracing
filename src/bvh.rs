@@ -126,7 +126,7 @@ impl BVH {
                 right_counter += 1;
                 right_box_accum.grow_by_aabb(&bvh.fragments.0[indices[i]]);
 
-                bvh.right_costs[i] = right_box_accum.half_area() * right_counter as f32;
+                bvh.right_costs[i] = right_box_accum.surface_area() * right_counter as f32;
 
                 i -= 1;
             }
