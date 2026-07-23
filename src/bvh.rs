@@ -126,7 +126,7 @@ impl BVH {
                 right_counter += 1;
                 right_box_accum.grow_by_aabb(&bvh.fragments.0[indices[i]]);
 
-                bvh.right_costs[i] = right_box_accum.surface_area() * right_counter as f32;
+                bvh.right_costs[i] = right_box_accum.half_area() * right_counter as f32;
 
                 i -= 1;
             }
@@ -138,7 +138,7 @@ impl BVH {
                 left_counter += 1;
                 left_box_accum.grow_by_aabb(&bvh.fragments.0[indices[i]]);
 
-                let left_cost = left_box_accum.surface_area() * left_counter as f32;
+                let left_cost = left_box_accum.half_area() * left_counter as f32;
                 let right_cost = bvh.right_costs[i + 1];
                 let cost = left_cost + right_cost;
 
@@ -153,7 +153,7 @@ impl BVH {
                 i += 1;
             }
         }
-        best_split_cost = TRAVERSAL_COST + (TRIANGLE_COST * best_split_cost / node.surface_area());
+        best_split_cost = TRAVERSAL_COST + (TRIANGLE_COST * best_split_cost / node.half_area());
 
         // Partition primitives
         for i in start..best_split_index {
