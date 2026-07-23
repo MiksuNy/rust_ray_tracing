@@ -114,11 +114,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0f - 1.0f, rand_f32(&rng_seed) * 2.0f - 1.0f) * 0.0005f;
     ray.direction = normalize(camera.look_at * vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f)).xyz;
 
-    let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    let accumulation_color = textureLoad(output_texture, tex_coords).rgb;
-    let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
+    //let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
+    //let accumulation_color = textureLoad(output_texture, tex_coords).rgb;
+    //let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
-    //let final_color = debug_bvh(ray, 300.0f);
+    let final_color = debug_bvh(ray, 300.0f);
 
     textureStore(output_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 }

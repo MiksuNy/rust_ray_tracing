@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::bvh::AABB;
 use crate::bvh::BVH;
+use crate::bvh::Bounds;
 use crate::loader::obj::OBJ;
 use crate::log_error;
 use crate::math::mat4::Mat4f;
@@ -79,7 +80,7 @@ impl From<OBJ> for Scene {
         scene.materials = obj.materials;
         scene.textures = obj.textures;
 
-        BVH::build(&mut scene, false);
+        BVH::build(&mut scene);
 
         return scene;
     }
@@ -104,7 +105,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
+    pub fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
         return Self {
             vertices,
             material_id,
@@ -112,10 +113,60 @@ impl Triangle {
         };
     }
 
-    pub fn bounds(&self) -> (Vec3f, Vec3f) {
-        let mut bounds = (Vec3f::from(f32::MAX), Vec3f::from(f32::MIN));
-        bounds.grow_by_tri(self);
-        return (bounds.0, bounds.1);
+    pub fn surface_area(&self) -> f32 {
+        let e_1 = self.vertices[1].position - self.vertices[0].position;
+        let e_2 = self.vertices[2].position - self.vertices[0].position;
+        let e_3 = Vec3f::cross(e_1, e_2);
+        return e_3.length() / 2.0;
+    }
+
+    // https://github.com/BoyBaykiller/IDKEngine/blob/b2e9c3e3e2f3098a1e907ccbb349f18b49dee7ce/IDKEngine/Source/Shapes/Triangle.cs#L47-L92
+    pub fn split(&self, axis: usize, position: f32) -> (Bounds, Bounds) {
+        let split_edge = |a: Vec3f, b: Vec3f| -> Vec3f {
+            let t = (position - a.data[axis]) / (b.data[axis] - a.data[axis]);
+            return a + (b - a) * t;
+        };
+
+        let mut left_bounds = Bounds::default();
+        let mut right_bounds = Bounds::default();
+
+        let q_0 = self.vertices[0].position.data[axis] <= position;
+        let q_1 = self.vertices[1].position.data[axis] <= position;
+        let q_2 = self.vertices[2].position.data[axis] <= position;
+
+        if q_0 {
+            left_bounds.grow_by_position(self.vertices[0].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[0].position);
+        }
+        if q_1 {
+            left_bounds.grow_by_position(self.vertices[1].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[1].position);
+        }
+        if q_2 {
+            left_bounds.grow_by_position(self.vertices[2].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[2].position);
+        }
+
+        if q_0 ^ q_1 {
+            let m = split_edge(self.vertices[0].position, self.vertices[1].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+        if q_1 ^ q_2 {
+            let m = split_edge(self.vertices[1].position, self.vertices[2].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+        if q_2 ^ q_0 {
+            let m = split_edge(self.vertices[2].position, self.vertices[0].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+
+        return (left_bounds, right_bounds);
     }
 }
 
