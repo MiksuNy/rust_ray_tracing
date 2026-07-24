@@ -12,7 +12,7 @@ use crate::{
     scene::{Scene, Triangle},
 };
 
-const SPLIT_FACTOR: f32 = 0.8;
+const SPLIT_FACTOR: f32 = 0.0;
 const TRIANGLE_COST: f32 = 1.1;
 const TRAVERSAL_COST: f32 = 1.0;
 
