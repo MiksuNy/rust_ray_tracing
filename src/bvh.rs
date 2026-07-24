@@ -1,10 +1,7 @@
-use rayon::{
-    iter::{IntoParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
+use rayon::slice::ParallelSliceMut;
 
 use crate::{
-    log_error, log_info, log_warning,
+    log_info,
     math::{
         vec::{Max, Min},
         vec3::*,
@@ -12,7 +9,7 @@ use crate::{
     scene::{Scene, Triangle},
 };
 
-const SPLIT_FACTOR: f32 = 0.0;
+const SPLIT_FACTOR: f32 = 0.3;
 const TRIANGLE_COST: f32 = 1.1;
 const TRAVERSAL_COST: f32 = 1.0;
 
@@ -155,6 +152,12 @@ impl BVH {
         }
         best_split_cost = TRAVERSAL_COST + (TRIANGLE_COST * best_split_cost / node.half_area());
 
+        // Terminate recursion if cost is too high
+        let parent_cost = node.num_tris as f32 * TRIANGLE_COST;
+        if best_split_cost >= parent_cost {
+            return;
+        }
+
         // Partition primitives
         for i in start..best_split_index {
             bvh.partition_left[bvh.fragment_ids_sorted_on_axis[best_split_axis][i]] = true;
@@ -177,11 +180,6 @@ impl BVH {
         partition.0.append(&mut partition.1);
         bvh.fragment_ids_sorted_on_axis[(best_split_axis + 2) % 3][start..end]
             .swap_with_slice(&mut partition.0);
-
-        let parent_cost = node.num_tris as f32 * TRIANGLE_COST;
-        if best_split_cost >= parent_cost {
-            return;
-        }
 
         let mut left = Node::default();
         left.first_tri_or_child = node.first_tri_or_child;
