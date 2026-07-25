@@ -228,8 +228,8 @@ impl BVH {
         counter = 0;
 
         let mut global_bounds = Bounds::default();
-        for i in 0..bounds.len() {
-            global_bounds.grow_by_aabb(&bounds[i]);
+        for tri in tris {
+            global_bounds.grow_by_tri(&tri);
         }
         let global_extent = global_bounds.extent();
 
