@@ -105,7 +105,7 @@ impl BVH {
         let used_nodes = bvh.nodes.len() as u32;
         let node = &mut bvh.nodes[index];
 
-        // SweepSAH
+        // SweepSAH https://github.com/BoyBaykiller/IDKEngine#good-bvhs-with-sweepsah
         let mut best_split_cost: f32 = f32::MAX;
         let mut best_split_index: usize = 0;
         let mut best_split_axis: usize = 0;
