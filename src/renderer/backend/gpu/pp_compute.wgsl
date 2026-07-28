@@ -1,5 +1,5 @@
 @group(0) @binding(0)
-var rt_texture: texture_storage_2d<rgba16unorm, read_write>;
+var rt_texture: texture_storage_2d<rgba32float, read_write>;
 
 @group(1) @binding(0)
 var pp_texture: texture_storage_2d<rgba16unorm, write>;
@@ -9,8 +9,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let tex_coords = vec2<i32>(i32(global_id.x), i32(global_id.y));
 
     var color = textureLoad(rt_texture, tex_coords).rgb;
-    color = linear_to_srgb(color);
     color = aces_filmic(color);
+    color = linear_to_srgb(color);
 
     textureStore(pp_texture, tex_coords, vec4<f32>(color, 1.0f));
 }

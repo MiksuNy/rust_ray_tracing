@@ -1,7 +1,7 @@
 enable wgpu_binding_array;
 
 @group(0) @binding(0)
-var output_texture: texture_storage_2d<rgba16unorm, read_write>;
+var rt_texture: texture_storage_2d<rgba32float, read_write>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -102,7 +102,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
     let tex_coords = vec2<u32>(global_id.xy);
 
-    let texture_dimensions = vec2<f32>(f32(textureDimensions(output_texture).x), f32(textureDimensions(output_texture).y));
+    let texture_dimensions = vec2<f32>(f32(textureDimensions(rt_texture).x), f32(textureDimensions(rt_texture).y));
     let aspect = texture_dimensions.x / texture_dimensions.y;
     let screen_coords = vec2<f32>(
         ((f32(global_id.x) / texture_dimensions.x) * 2.0f - 1.0f) * aspect,
@@ -115,12 +115,12 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     ray.direction = normalize(camera.look_at * vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f)).xyz;
 
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    let accumulation_color = textureLoad(output_texture, tex_coords).rgb;
+    let accumulation_color = textureLoad(rt_texture, tex_coords).rgb;
     let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
     //let final_color = debug_bvh(ray, 300.0f);
 
-    textureStore(output_texture, tex_coords, vec4<f32>(final_color, 1.0f));
+    textureStore(rt_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
@@ -198,7 +198,7 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             // Russian roulette
             var rr_probability = 1.0f;
-            if curr_ray_depth >= 3 {
+            if curr_ray_depth >= 4 {
                 rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
                 if rr_probability < rand_f32(rng_seed) {
                     break;
@@ -500,17 +500,18 @@ fn turbo_colormap(x_ptr: ptr<function, f32>) -> vec3<f32> {
     );
 }
 
-fn xor_shift(input: ptr<function, u32>) -> u32 {
-    var x = *input;
-    x = x ^ (x << 13);
-    x = x ^ (x >> 17);
-    x = x ^ (x << 5);
-    *input = x;
-    return x;
+// https://www.reedbeta.com/blog/quick-and-easy-gpu-random-numbers-in-d3d11/
+fn wang_hash(seed: ptr<function, u32>) -> u32 {
+    *seed = (*seed ^ 61u) ^ (*seed >> 16u);
+    *seed *= 9;
+    *seed = *seed ^ (*seed >> 4u);
+    *seed *= 0x27d4eb2d;
+    *seed = *seed ^ (*seed >> 15u);
+    return *seed;
 }
 
 fn rand_f32(input: ptr<function, u32>) -> f32 {
-    return f32(xor_shift(input)) / f32(0xFFFFFFFF);
+    return f32(wang_hash(input)) / f32(0xFFFFFFFF);
 }
 
 fn sample_texture(index: u32, uv: vec2<f32>) -> vec4<f32> {
