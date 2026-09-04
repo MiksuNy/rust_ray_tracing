@@ -1,7 +1,6 @@
 use crate::{
     bvh::Node,
     log_info,
-    math::{mat4::*, vec3::*},
     renderer::{Renderer, backend::gpu::texture::Texture},
     scene::{Camera, Material, Scene, Triangle},
 };
@@ -455,7 +454,6 @@ impl UniformBuffers {
         let uniform_camera = UniformCamera {
             look_at: scene.camera.look_at,
             position: scene.camera.position,
-            _pad: [0; 4],
         };
         let camera_buffer = Buffer::create_uniform_buffer(device, 0, &[uniform_camera]);
 
@@ -477,20 +475,21 @@ impl UniformBuffers {
     }
 }
 
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy)]
 #[repr(C, align(16))]
 struct UniformCamera {
-    look_at: Mat4f,
-    position: Vec3f,
-    _pad: [u8; 4],
+    look_at: glam::Mat4,
+    position: glam::Vec3,
 }
+
+unsafe impl bytemuck::Pod for UniformCamera {}
+unsafe impl bytemuck::Zeroable for UniformCamera {}
 
 impl From<Camera> for UniformCamera {
     fn from(camera: Camera) -> Self {
         return Self {
             look_at: camera.look_at,
             position: camera.position,
-            _pad: [0; 4],
         };
     }
 }

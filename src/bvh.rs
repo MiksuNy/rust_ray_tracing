@@ -2,10 +2,6 @@ use rayon::slice::ParallelSliceMut;
 
 use crate::{
     log_info,
-    math::{
-        vec::{Max, Min},
-        vec3::*,
-    },
     scene::{Scene, Triangle},
 };
 
@@ -94,8 +90,8 @@ impl BVH {
 
             // par_sort_by is a bit faster here than sort_by
             self.fragment_ids_sorted_on_axis[axis].par_sort_by(|a, b| {
-                let a_pos: f32 = self.fragments.0[*a].center().data[axis];
-                let b_pos: f32 = self.fragments.0[*b].center().data[axis];
+                let a_pos: f32 = self.fragments.0[*a].center().to_array()[axis];
+                let b_pos: f32 = self.fragments.0[*b].center().to_array()[axis];
                 return a_pos.partial_cmp(&b_pos).unwrap();
             });
         }
@@ -259,15 +255,17 @@ impl BVH {
                 let largest_extent = parent_box.largest_extent();
 
                 let mut node_size =
-                    Self::get_node_size(largest_extent, global_extent.data[split_axis]);
+                    Self::get_node_size(largest_extent, global_extent.to_array()[split_axis]);
                 if node_size >= largest_extent - 0.0001 {
                     node_size *= 0.5;
                 }
 
-                let mid_pos =
-                    (parent_box.min.data[split_axis] + parent_box.max.data[split_axis]) * 0.5;
-                let index = f32::round((mid_pos - global_bounds.min.data[split_axis]) / node_size);
-                let split_pos = global_bounds.min.data[split_axis] + index * node_size;
+                let mid_pos = (parent_box.min.to_array()[split_axis]
+                    + parent_box.max.to_array()[split_axis])
+                    * 0.5;
+                let index =
+                    f32::round((mid_pos - global_bounds.min.to_array()[split_axis]) / node_size);
+                let split_pos = global_bounds.min.to_array()[split_axis] + index * node_size;
 
                 let (mut left_box, mut right_box) = tri.split(split_axis, split_pos);
                 left_box.clip_against_aabb(&parent_box);
@@ -357,57 +355,60 @@ impl BVH {
     }
 }
 
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy)]
 #[repr(C, align(16))]
 pub struct Node {
-    pub bounds_min: Vec3f,
+    pub bounds_min: glam::Vec3,
     pub first_tri_or_child: u32,
-    pub bounds_max: Vec3f,
+    pub bounds_max: glam::Vec3,
     pub num_tris: u32,
 }
+
+unsafe impl bytemuck::Pod for Node {}
+unsafe impl bytemuck::Zeroable for Node {}
 
 impl Default for Node {
     fn default() -> Self {
         return Self {
-            bounds_min: Vec3f::from(f32::MAX),
+            bounds_min: glam::Vec3::new(f32::MAX, f32::MAX, f32::MAX),
             first_tri_or_child: 0,
-            bounds_max: Vec3f::from(f32::MIN),
+            bounds_max: glam::Vec3::new(f32::MIN, f32::MIN, f32::MIN),
             num_tris: 0,
         };
     }
 }
 
 impl AABB for Node {
-    fn bounds(&self) -> (Vec3f, Vec3f) {
+    fn bounds(&self) -> (glam::Vec3, glam::Vec3) {
         (self.bounds_min, self.bounds_max)
     }
 
-    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f) {
+    fn bounds_mut(&mut self) -> (&mut glam::Vec3, &mut glam::Vec3) {
         (&mut self.bounds_min, &mut self.bounds_max)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct Bounds {
-    min: Vec3f,
-    max: Vec3f,
+    min: glam::Vec3,
+    max: glam::Vec3,
 }
 
 impl Default for Bounds {
     fn default() -> Self {
         Self {
-            min: Vec3f::from(f32::MAX),
-            max: Vec3f::from(f32::MIN),
+            min: glam::Vec3::new(f32::MAX, f32::MAX, f32::MAX),
+            max: glam::Vec3::new(f32::MIN, f32::MIN, f32::MIN),
         }
     }
 }
 
 impl AABB for Bounds {
-    fn bounds(&self) -> (Vec3f, Vec3f) {
+    fn bounds(&self) -> (glam::Vec3, glam::Vec3) {
         (self.min, self.max)
     }
 
-    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f) {
+    fn bounds_mut(&mut self) -> (&mut glam::Vec3, &mut glam::Vec3) {
         (&mut self.min, &mut self.max)
     }
 }
@@ -421,14 +422,14 @@ impl From<Triangle> for Bounds {
 }
 
 pub trait AABB {
-    fn bounds(&self) -> (Vec3f, Vec3f);
+    fn bounds(&self) -> (glam::Vec3, glam::Vec3);
 
-    fn bounds_mut(&mut self) -> (&mut Vec3f, &mut Vec3f);
+    fn bounds_mut(&mut self) -> (&mut glam::Vec3, &mut glam::Vec3);
 
     fn grow_by_tri(&mut self, tri: &Triangle) {
         for vertex in tri.vertices {
-            *self.bounds_mut().0 = Vec3f::min(self.bounds().0, vertex.position);
-            *self.bounds_mut().1 = Vec3f::max(self.bounds().1, vertex.position);
+            *self.bounds_mut().0 = glam::Vec3::min(self.bounds().0, vertex.position);
+            *self.bounds_mut().1 = glam::Vec3::max(self.bounds().1, vertex.position);
         }
     }
 
@@ -436,31 +437,31 @@ pub trait AABB {
     where
         T: AABB,
     {
-        *self.bounds_mut().0 = Vec3f::min(self.bounds().0, other.bounds().0);
-        *self.bounds_mut().1 = Vec3f::max(self.bounds().1, other.bounds().1);
+        *self.bounds_mut().0 = glam::Vec3::min(self.bounds().0, other.bounds().0);
+        *self.bounds_mut().1 = glam::Vec3::max(self.bounds().1, other.bounds().1);
     }
 
-    fn grow_by_position(&mut self, pos: Vec3f) {
-        *self.bounds_mut().0 = Vec3f::min(self.bounds().0, pos);
-        *self.bounds_mut().1 = Vec3f::max(self.bounds().1, pos);
+    fn grow_by_position(&mut self, pos: glam::Vec3) {
+        *self.bounds_mut().0 = glam::Vec3::min(self.bounds().0, pos);
+        *self.bounds_mut().1 = glam::Vec3::max(self.bounds().1, pos);
     }
 
     fn clip_against_aabb<T>(&mut self, other: &T)
     where
         T: AABB,
     {
-        *self.bounds_mut().0 = Vec3f::max(self.bounds().0, other.bounds().0);
-        *self.bounds_mut().1 = Vec3f::min(self.bounds().1, other.bounds().1);
+        *self.bounds_mut().0 = glam::Vec3::max(self.bounds().0, other.bounds().0);
+        *self.bounds_mut().1 = glam::Vec3::min(self.bounds().1, other.bounds().1);
     }
 
-    fn extent(&self) -> Vec3f {
+    fn extent(&self) -> glam::Vec3 {
         self.bounds().1 - self.bounds().0
     }
 
     fn largest_extent(&self) -> f32 {
         let extent = self.extent();
         let mut largest: f32 = 0.0;
-        for axis in extent.data {
+        for axis in extent.to_array() {
             largest = f32::max(largest, axis);
         }
         return largest;
@@ -469,10 +470,10 @@ pub trait AABB {
     fn largest_axis(&self) -> usize {
         let extent = self.extent();
         let mut axis = 0;
-        if extent.data[0] < extent.data[1] {
+        if extent.to_array()[0] < extent.to_array()[1] {
             axis = 1;
         }
-        if extent.data[axis] < extent.data[2] {
+        if extent.to_array()[axis] < extent.to_array()[2] {
             axis = 2;
         }
         return axis;
@@ -480,16 +481,15 @@ pub trait AABB {
 
     fn surface_area(&self) -> f32 {
         let extent = self.extent();
-        return ((extent.x() * extent.z()) + (extent.x() * extent.y()) + (extent.z() * extent.y()))
-            * 2.0;
+        return ((extent.x * extent.z) + (extent.x * extent.y) + (extent.z * extent.y)) * 2.0;
     }
 
     fn half_area(&self) -> f32 {
         let extent = self.extent();
-        return (extent.x() * extent.z()) + (extent.x() * extent.y()) + (extent.z() * extent.y());
+        return (extent.x * extent.z) + (extent.x * extent.y) + (extent.z * extent.y);
     }
 
-    fn center(&self) -> Vec3f {
+    fn center(&self) -> glam::Vec3 {
         (self.bounds().0 + self.bounds().1) / 2.0
     }
 }

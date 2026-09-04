@@ -1,6 +1,5 @@
 use crate::{
-    log_error, log_info, log_warning, math::vec::*, math::vec3::*, scene::Material,
-    texture::Texture, texture::TextureType,
+    log_error, log_info, log_warning, scene::Material, texture::Texture, texture::TextureType,
 };
 use std::{collections::HashMap, path::PathBuf};
 
@@ -106,13 +105,13 @@ impl OBJ {
         // Precalculate vertex normals
         if obj.vertex_buffer.normals.is_empty() {
             for (i, tri) in obj.tris.iter_mut().enumerate() {
-                let v_1 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[0]]);
-                let v_2 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[1]]);
-                let v_3 = Vec3f::from(obj.vertex_buffer.positions[tri.positions[2]]);
+                let v_1 = glam::Vec3::from(obj.vertex_buffer.positions[tri.positions[0]]);
+                let v_2 = glam::Vec3::from(obj.vertex_buffer.positions[tri.positions[1]]);
+                let v_3 = glam::Vec3::from(obj.vertex_buffer.positions[tri.positions[2]]);
                 let u = v_2 - v_1;
                 let v = v_3 - v_1;
-                let n = Vec3f::cross(u, v).normalized();
-                obj.vertex_buffer.normals.push(n.data);
+                let n = glam::Vec3::cross(u, v).normalize();
+                obj.vertex_buffer.normals.push(n.to_array());
                 tri.normals[0] = i;
                 tri.normals[1] = i;
                 tri.normals[2] = i;
@@ -149,17 +148,17 @@ impl OBJ {
                     match prefix {
                         "Kd" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.base_color.data[i] = val.parse().unwrap();
+                                new_material.1.base_color.to_array()[i] = val.parse().unwrap();
                             });
                         }
                         "Ks" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.specular_tint.data[i] = val.parse().unwrap();
+                                new_material.1.specular_tint.to_array()[i] = val.parse().unwrap();
                             });
                         }
                         "Ke" => {
                             attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.emission.data[i] = val.parse().unwrap();
+                                new_material.1.emission.to_array()[i] = val.parse().unwrap();
                             });
                         }
                         "Ni" => {

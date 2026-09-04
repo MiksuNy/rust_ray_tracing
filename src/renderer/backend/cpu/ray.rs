@@ -1,55 +1,54 @@
+use glam::Vec4Swizzles;
+
 use crate::bvh::Node;
-use crate::math::vec::*;
-use crate::math::vec2::*;
-use crate::math::vec3::*;
 use crate::scene::Material;
 use crate::scene::{Scene, Triangle};
 
 #[derive(Clone, Copy)]
 pub struct Ray {
-    pub origin: Vec3f,
-    pub direction: Vec3f,
+    pub origin: glam::Vec3,
+    pub direction: glam::Vec3,
 }
 
 impl Ray {
-    pub fn new(origin: Vec3f, direction: Vec3f) -> Self {
+    pub fn new(origin: glam::Vec3, direction: glam::Vec3) -> Self {
         return Self { origin, direction };
     }
 
     fn intersect_tri(ray: &Self, tri: &Triangle) -> HitInfo {
-        let v_1 = Vec3f::from(tri.vertices[0].position);
-        let v_2 = Vec3f::from(tri.vertices[1].position);
-        let v_3 = Vec3f::from(tri.vertices[2].position);
+        let v_1 = tri.vertices[0].position;
+        let v_2 = tri.vertices[1].position;
+        let v_3 = tri.vertices[2].position;
 
         let edge_1 = v_2 - v_1;
         let edge_2 = v_3 - v_1;
 
-        let ray_cross_e2 = Vec3f::cross(ray.direction, edge_2);
-        let det = Vec3f::dot(edge_1, ray_cross_e2);
+        let ray_cross_e2 = glam::Vec3::cross(ray.direction, edge_2);
+        let det = glam::Vec3::dot(edge_1, ray_cross_e2);
 
         let inv_det = 1.0 / det;
         let s = ray.origin - v_1;
-        let u = inv_det * Vec3f::dot(s, ray_cross_e2);
+        let u = inv_det * glam::Vec3::dot(s, ray_cross_e2);
 
-        let s_cross_e1 = Vec3f::cross(s, edge_1);
-        let v = inv_det * Vec3f::dot(ray.direction, s_cross_e1);
+        let s_cross_e1 = glam::Vec3::cross(s, edge_1);
+        let v = inv_det * glam::Vec3::dot(ray.direction, s_cross_e1);
 
-        let t = inv_det * Vec3f::dot(edge_2, s_cross_e1);
+        let t = inv_det * glam::Vec3::dot(edge_2, s_cross_e1);
 
         let front_face = det > 0.0;
 
         // Smooth shading
-        let n_0: Vec3f = tri.vertices[0].normal.into();
-        let n_1: Vec3f = tri.vertices[1].normal.into();
-        let n_2: Vec3f = tri.vertices[2].normal.into();
-        let mut normal: Vec3f = n_0 * (1.0 - u - v) + (n_1 * u) + (n_2 * v);
+        let n_0 = tri.vertices[0].normal;
+        let n_1 = tri.vertices[1].normal;
+        let n_2 = tri.vertices[2].normal;
+        let mut normal = n_0 * (1.0 - u - v) + (n_1 * u) + (n_2 * v);
         if !front_face {
-            normal = normal.reversed();
+            normal = -normal;
         }
 
-        let t_0 = Vec2f::new(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
-        let t_1 = Vec2f::new(tri.vertices[1].tex_coord_x, tri.vertices[1].tex_coord_y);
-        let t_2 = Vec2f::new(tri.vertices[2].tex_coord_x, tri.vertices[2].tex_coord_y);
+        let t_0 = glam::Vec2::new(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
+        let t_1 = glam::Vec2::new(tri.vertices[1].tex_coord_x, tri.vertices[1].tex_coord_y);
+        let t_2 = glam::Vec2::new(tri.vertices[2].tex_coord_x, tri.vertices[2].tex_coord_y);
         let uv = t_0 * (1.0 - u - v) + (t_1 * u) + (t_2 * v);
 
         return HitInfo {
@@ -69,10 +68,10 @@ impl Ray {
     fn intersect_node(ray: &Self, node: &Node) -> f32 {
         let t_min = (node.bounds_min - ray.origin) / ray.direction;
         let t_max = (node.bounds_max - ray.origin) / ray.direction;
-        let t_1 = Vec3f::min(t_min, t_max);
-        let t_2 = Vec3f::max(t_min, t_max);
-        let t_near = f32::max(f32::max(t_1.x(), t_1.y()), t_1.z());
-        let t_far = f32::min(f32::min(t_2.x(), t_2.y()), t_2.z());
+        let t_1 = glam::Vec3::min(t_min, t_max);
+        let t_2 = glam::Vec3::max(t_min, t_max);
+        let t_near = t_1.max_element();
+        let t_far = t_2.min_element();
         if t_near <= t_far && t_far > 0.0 {
             return t_near;
         } else {
@@ -138,10 +137,15 @@ impl Ray {
         }
     }
 
-    pub fn trace(ray: &mut Self, max_bounces: usize, scene: &Scene, rng_state: &mut u32) -> Vec3f {
-        let mut ray_color = Vec3f::new(1.0, 1.0, 1.0);
-        let mut incoming_light = Vec3f::new(0.0, 0.0, 0.0);
-        let mut emitted_light = Vec3f::new(0.0, 0.0, 0.0);
+    pub fn trace(
+        ray: &mut Self,
+        max_bounces: usize,
+        scene: &Scene,
+        rng_state: &mut u32,
+    ) -> glam::Vec3 {
+        let mut ray_color = glam::Vec3::new(1.0, 1.0, 1.0);
+        let mut incoming_light = glam::Vec3::new(0.0, 0.0, 0.0);
+        let mut emitted_light = glam::Vec3::new(0.0, 0.0, 0.0);
 
         let mut curr_bounces: usize = 0;
         while curr_bounces < max_bounces {
@@ -160,30 +164,29 @@ impl Ray {
                 }
 
                 if hit_material.base_color_tex_id != u32::MAX {
-                    ray_color *= Vec3f::from(
-                        scene.textures[hit_material.base_color_tex_id as usize]
-                            .color_at(hit_info.uv),
-                    );
+                    ray_color *= scene.textures[hit_material.base_color_tex_id as usize]
+                        .color_at(hit_info.uv)
+                        .xyz();
                 } else {
                     ray_color *= hit_material.base_color;
                 }
                 if hit_material.emission_tex_id != u32::MAX {
-                    emitted_light += Vec3f::from(
-                        scene.textures[hit_material.emission_tex_id as usize].color_at(hit_info.uv),
-                    );
+                    emitted_light += scene.textures[hit_material.emission_tex_id as usize]
+                        .color_at(hit_info.uv)
+                        .xyz();
                 } else {
                     emitted_light += hit_material.emission;
                 }
                 incoming_light += emitted_light * ray_color;
 
                 let new_dir =
-                    (hit_info.normal + Vec3f::rand_in_unit_sphere(rng_state)).normalized();
+                    (hit_info.normal + crate::math::rand_in_unit_sphere(rng_state)).normalize();
                 *ray = Self::new(hit_info.point + new_dir * 0.0001, new_dir);
 
                 curr_bounces += 1;
             } else {
-                let sky_color = Vec3f::new(1.0, 1.0, 1.0);
-                let sky_strength = Vec3f::from(1.0);
+                let sky_color = glam::Vec3::new(1.0, 1.0, 1.0);
+                let sky_strength = glam::Vec3::new(1.0, 1.0, 1.0);
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;
@@ -204,10 +207,10 @@ impl Ray {
 
 struct HitInfo {
     has_hit: bool,
-    point: Vec3f,
-    normal: Vec3f,
+    point: glam::Vec3,
+    normal: glam::Vec3,
     distance: f32,
-    uv: Vec2f,
+    uv: glam::Vec2,
     material_id: u32,
     front_face: bool,
 }
@@ -216,10 +219,10 @@ impl Default for HitInfo {
     fn default() -> Self {
         return Self {
             has_hit: false,
-            point: Vec3f::default(),
-            normal: Vec3f::default(),
+            point: glam::Vec3::default(),
+            normal: glam::Vec3::default(),
             distance: 1e30f32,
-            uv: Vec2f::default(),
+            uv: glam::Vec2::default(),
             material_id: 0,
             front_face: false,
         };

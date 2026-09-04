@@ -1,4 +1,4 @@
-use crate::{log_error, math::vec2::*};
+use crate::log_error;
 
 #[derive(Clone, Default)]
 pub struct Texture {
@@ -30,11 +30,17 @@ impl Texture {
         });
     }
 
-    pub fn color_at(&self, uv: Vec2f) -> [u8; 4] {
-        let i: i32 = (f32::fract(uv.x()) * self.width as f32) as i32;
-        let j: i32 = (f32::fract(uv.y()) * self.height as f32) as i32;
+    pub fn color_at(&self, uv: glam::Vec2) -> glam::Vec4 {
+        let i: i32 = (f32::fract(uv.x) * self.width as f32) as i32;
+        let j: i32 = (f32::fract(uv.y) * self.height as f32) as i32;
         let index: i32 = i + (j * self.width as i32);
-        return self.pixel_data[index as usize];
+        let bytes = self.pixel_data[index as usize];
+        return glam::Vec4::new(
+            bytes[0] as f32,
+            bytes[1] as f32,
+            bytes[2] as f32,
+            bytes[3] as f32,
+        );
     }
 
     fn calculate_djb2_hash(pixel_data: &[[u8; 4]]) -> u32 {

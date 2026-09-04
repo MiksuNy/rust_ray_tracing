@@ -11,6 +11,7 @@ winit = "0.30.13"
 pollster = "0.4.0"
 bytemuck = "=1.24.0"
 chrono = "0.4.44"
+glam = "0.33.6"
 
 [profile.dev]
 opt-level = 3

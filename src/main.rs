@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::math::vec3::Vec3f;
 use crate::renderer::backend::RendererBackend;
 use crate::renderer::*;
 use crate::scene::{Camera, Scene};
@@ -38,7 +37,7 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = Vec3f::new(-11.204422, 2.1092458, -0.12164927);
+    camera.position = glam::Vec3::new(-11.204422, 2.1092458, -0.12164927);
     camera.pitch = 1.5998944;
     camera.yaw = -179.10223;
     scene.set_camera(camera);
