@@ -2,7 +2,6 @@ use crate::log_info;
 use crate::math::rand_f32;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
-use glam::Vec4Swizzles;
 use ray::Ray;
 use rayon::prelude::*;
 
@@ -26,7 +25,9 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
         .map(|index: usize| {
             let mut rng_state: u32 =
                 987612486u32.wrapping_mul((index as u32).wrapping_add(87636354u32));
+
             let mut final_color = glam::Vec3::new(0.0, 0.0, 0.0);
+
             let x: usize = index % width;
             let y: usize = height - (index / width);
             let screen_x =
@@ -34,19 +35,21 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
             let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
             for _ in 0..renderer.options.samples {
-                let jitter = glam::Vec3::new(
+                let jitter = glam::Vec2::new(
                     rand_f32(&mut rng_state) * 2.0 - 1.0,
                     rand_f32(&mut rng_state) * 2.0 - 1.0,
-                    0.0,
                 ) * 0.0005;
-                let direction = (scene.camera.look_at
-                    * glam::Vec4::new(-screen_x + jitter.x, screen_y + jitter.y, 1.0, 1.0))
-                .normalize();
-                let mut ray = Ray::new(
-                    // Hard coded camera position
-                    scene.camera.position,
-                    direction.xyz(),
-                );
+
+                let direction = scene
+                    .camera
+                    .look_at
+                    .transform_vector3(glam::Vec3::new(
+                        -screen_x + jitter.x,
+                        screen_y + jitter.y,
+                        1.0,
+                    ))
+                    .normalize();
+                let mut ray = Ray::new(scene.camera.position, direction);
 
                 final_color += Ray::trace(
                     &mut ray,

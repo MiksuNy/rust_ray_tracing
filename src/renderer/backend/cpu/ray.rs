@@ -186,7 +186,7 @@ impl Ray {
                 curr_bounces += 1;
             } else {
                 let sky_color = glam::Vec3::new(1.0, 1.0, 1.0);
-                let sky_strength = glam::Vec3::new(1.0, 1.0, 1.0);
+                let sky_strength = 0.0;
 
                 ray_color *= sky_color;
                 emitted_light += sky_strength;

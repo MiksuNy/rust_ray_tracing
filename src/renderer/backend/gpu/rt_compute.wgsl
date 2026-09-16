@@ -112,7 +112,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var ray = Ray();
     ray.origin = camera.position;
     let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0f - 1.0f, rand_f32(&rng_seed) * 2.0f - 1.0f) * 0.0005f;
-    ray.direction = normalize(camera.look_at * vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f)).xyz;
+    ray.direction = (camera.look_at * normalize(vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f))).xyz;
 
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
     let accumulation_color = textureLoad(rt_texture, tex_coords).rgb;
@@ -127,9 +127,6 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
     var ray_color = vec3<f32>(1.0f);
     var incoming_light = vec3<f32>(0.0f);
 
-    var prev_hit_point = ray.origin;
-    var transmitted_distance = 0.0f;
-
     var curr_ray_depth: u32 = 0u;
     while curr_ray_depth < max_ray_depth {
         var hit_info = traverse_bvh(*ray);
@@ -139,13 +136,6 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             var hit_material = materials[hit_info.material_id];
             set_surface_properties(&hit_info, &hit_material);
-
-            var transmitted_distance = hit_info.distance;
-            if hit_info.front_face {
-                prev_hit_point = hit_info.point;
-            } else {
-                transmitted_distance = distance(hit_info.point, prev_hit_point);
-            }
 
             if hit_material.transparency < rand_f32(rng_seed) {
                 (*ray).origin = hit_info.point + (*ray).direction * EPSILON;
@@ -173,15 +163,6 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                     if dot(new_dir, hit_info.normal) > 0.0f {
                         break;
                     }
-                    var absorption = vec3<f32>(1.0f);
-                    if !hit_info.front_face {
-                        absorption = vec3<f32>(
-                            exp(-(1.0f - hit_material.base_color.r) * transmitted_distance),
-                            exp(-(1.0f - hit_material.base_color.g) * transmitted_distance),
-                            exp(-(1.0f - hit_material.base_color.b) * transmitted_distance),
-                        );
-                    }
-                    ray_color *= absorption;
                 } else {
                     new_dir = diffuse_dir;
                 }

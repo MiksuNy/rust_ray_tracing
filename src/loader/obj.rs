@@ -147,19 +147,25 @@ impl OBJ {
 
                     match prefix {
                         "Kd" => {
-                            attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.base_color.to_array()[i] = val.parse().unwrap();
-                            });
+                            new_material.1.base_color.x =
+                                attribute.next().unwrap().parse().unwrap();
+                            new_material.1.base_color.y =
+                                attribute.next().unwrap().parse().unwrap();
+                            new_material.1.base_color.z =
+                                attribute.next().unwrap().parse().unwrap();
                         }
                         "Ks" => {
-                            attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.specular_tint.to_array()[i] = val.parse().unwrap();
-                            });
+                            new_material.1.specular_tint.x =
+                                attribute.next().unwrap().parse().unwrap();
+                            new_material.1.specular_tint.y =
+                                attribute.next().unwrap().parse().unwrap();
+                            new_material.1.specular_tint.z =
+                                attribute.next().unwrap().parse().unwrap();
                         }
                         "Ke" => {
-                            attribute.enumerate().for_each(|(i, val)| {
-                                new_material.1.emission.to_array()[i] = val.parse().unwrap();
-                            });
+                            new_material.1.emission.x = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.emission.y = attribute.next().unwrap().parse().unwrap();
+                            new_material.1.emission.z = attribute.next().unwrap().parse().unwrap();
                         }
                         "Ni" => {
                             new_material.1.ior = attribute.next().unwrap().parse().unwrap();

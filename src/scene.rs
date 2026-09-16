@@ -83,7 +83,7 @@ impl From<OBJ> for Scene {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 pub struct Vertex {
     pub position: glam::Vec3,
@@ -91,9 +91,6 @@ pub struct Vertex {
     pub normal: glam::Vec3,
     pub tex_coord_y: f32,
 }
-
-unsafe impl bytemuck::Pod for Vertex {}
-unsafe impl bytemuck::Zeroable for Vertex {}
 
 // This needs to derive some bytemuck traits so we can put 'em in a buffer on the GPU
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -170,7 +167,7 @@ impl Triangle {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 pub struct Material {
     pub base_color: glam::Vec3,
@@ -188,9 +185,6 @@ pub struct Material {
     pub emission_tex_id: u32,
     pub normal_tex_id: u32,
 }
-
-unsafe impl bytemuck::Pod for Material {}
-unsafe impl bytemuck::Zeroable for Material {}
 
 impl Default for Material {
     fn default() -> Self {
@@ -241,6 +235,7 @@ impl Camera {
             self.position,
             self.position + self.forward,
             self.up,
-        );
+        )
+        .transpose();
     }
 }

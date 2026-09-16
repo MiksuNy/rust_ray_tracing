@@ -188,7 +188,7 @@ impl AppState {
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             width: self.size.width,
             height: self.size.height,
-            desired_maximum_frame_latency: 1,
+            desired_maximum_frame_latency: 2,
             present_mode: wgpu::PresentMode::AutoVsync,
             color_space: wgpu::SurfaceColorSpace::Auto,
         };

@@ -451,10 +451,7 @@ struct UniformBuffers {
 
 impl UniformBuffers {
     fn new(device: &wgpu::Device, scene: &Scene) -> Self {
-        let uniform_camera = UniformCamera {
-            look_at: scene.camera.look_at,
-            position: scene.camera.position,
-        };
+        let uniform_camera = UniformCamera::new(scene.camera.look_at, scene.camera.position);
         let camera_buffer = Buffer::create_uniform_buffer(device, 0, &[uniform_camera]);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -475,22 +472,31 @@ impl UniformBuffers {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 struct UniformCamera {
     look_at: glam::Mat4,
     position: glam::Vec3,
+    _pad: [u8; 4],
 }
 
-unsafe impl bytemuck::Pod for UniformCamera {}
-unsafe impl bytemuck::Zeroable for UniformCamera {}
+impl UniformCamera {
+    pub fn new(look_at: glam::Mat4, position: glam::Vec3) -> Self {
+        Self {
+            look_at,
+            position,
+            _pad: [0; 4],
+        }
+    }
+}
 
 impl From<Camera> for UniformCamera {
     fn from(camera: Camera) -> Self {
-        return Self {
+        Self {
             look_at: camera.look_at,
             position: camera.position,
-        };
+            _pad: [0; 4],
+        }
     }
 }
 

@@ -63,13 +63,18 @@ impl Renderer {
             };
             log_info!("Rendering took {} ms", start_time.elapsed().as_millis());
 
+            let color_type: image::ColorType = match self.options.backend {
+                RendererBackend::CPU => image::ColorType::Rgba8,
+                RendererBackend::GPU => image::ColorType::Rgba16,
+            };
+
             let path = self.options.output_image_path.unwrap();
             let image_result = image::save_buffer(
                 path,
                 bytes.as_slice(),
                 self.options.output_image_dimensions.0 as u32,
                 self.options.output_image_dimensions.1 as u32,
-                image::ColorType::Rgba16,
+                color_type,
             );
 
             if image_result.is_err() {

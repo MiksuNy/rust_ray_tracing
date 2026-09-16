@@ -31,15 +31,15 @@ impl Texture {
     }
 
     pub fn color_at(&self, uv: glam::Vec2) -> glam::Vec4 {
-        let i: i32 = (f32::fract(uv.x) * self.width as f32) as i32;
-        let j: i32 = (f32::fract(uv.y) * self.height as f32) as i32;
+        let i: i32 = (uv.x.rem_euclid(1.0) * self.width as f32) as i32;
+        let j: i32 = (uv.y.rem_euclid(1.0) * self.height as f32) as i32;
         let index: i32 = i + (j * self.width as i32);
         let bytes = self.pixel_data[index as usize];
         return glam::Vec4::new(
-            bytes[0] as f32,
-            bytes[1] as f32,
-            bytes[2] as f32,
-            bytes[3] as f32,
+            bytes[0] as f32 / 255.0,
+            bytes[1] as f32 / 255.0,
+            bytes[2] as f32 / 255.0,
+            bytes[3] as f32 / 255.0,
         );
     }
 
@@ -51,13 +51,6 @@ impl Texture {
                 ((hash << 5).wrapping_add(hash)).wrapping_add(*bytemuck::from_bytes::<u32>(color));
         }
         return hash;
-    }
-
-    pub fn packed_data(&self) -> Vec<u32> {
-        self.pixel_data
-            .iter()
-            .map(|pixel| u32::from_le_bytes(*pixel))
-            .collect()
     }
 }
 

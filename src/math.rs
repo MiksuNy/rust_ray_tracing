@@ -65,8 +65,8 @@ pub fn aces_filmic(x: glam::Vec3) -> glam::Vec3 {
 
 pub fn color_to_bytes(color: glam::Vec3) -> [u8; 3] {
     [
-        (color.x / 255.0) as u8,
-        (color.y / 255.0) as u8,
-        (color.z / 255.0) as u8,
+        (color.x * 255.0) as u8,
+        (color.y * 255.0) as u8,
+        (color.z * 255.0) as u8,
     ]
 }
