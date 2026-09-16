@@ -1,7 +1,5 @@
 use crate::log_info;
 use crate::math::rand_f32;
-use crate::math::vec::*;
-use crate::math::vec3::*;
 use crate::renderer::Renderer;
 use crate::scene::Scene;
 use ray::Ray;
@@ -27,7 +25,9 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
         .map(|index: usize| {
             let mut rng_state: u32 =
                 987612486u32.wrapping_mul((index as u32).wrapping_add(87636354u32));
-            let mut final_color = Vec3f::new(0.0, 0.0, 0.0);
+
+            let mut final_color = glam::Vec3::new(0.0, 0.0, 0.0);
+
             let x: usize = index % width;
             let y: usize = height - (index / width);
             let screen_x =
@@ -35,19 +35,21 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
             let screen_y = ((y as f32 / height as f32) * 2.0) - 1.0;
 
             for _ in 0..renderer.options.samples {
-                let jitter = Vec3f::new(
+                let jitter = glam::Vec2::new(
                     rand_f32(&mut rng_state) * 2.0 - 1.0,
                     rand_f32(&mut rng_state) * 2.0 - 1.0,
-                    0.0,
                 ) * 0.0005;
-                let direction = (scene.camera.look_at
-                    * Vec3f::new(-screen_x + jitter.x(), screen_y + jitter.y(), 1.0))
-                .normalized();
-                let mut ray = Ray::new(
-                    // Hard coded camera position
-                    scene.camera.position,
-                    direction,
-                );
+
+                let direction = scene
+                    .camera
+                    .look_at
+                    .transform_vector3(glam::Vec3::new(
+                        -screen_x + jitter.x,
+                        screen_y + jitter.y,
+                        1.0,
+                    ))
+                    .normalize();
+                let mut ray = Ray::new(scene.camera.position, direction);
 
                 final_color += Ray::trace(
                     &mut ray,
@@ -58,10 +60,11 @@ pub fn render_scene(renderer: Renderer, scene: &Scene) -> Vec<u8> {
             }
 
             final_color /= renderer.options.samples as f32;
-            final_color = Vec3f::linear_to_srgb(final_color);
+            final_color = crate::math::aces_filmic(final_color);
+            final_color = crate::math::linear_to_srgb(final_color);
 
-            let rgb: [u8; 3] = final_color.into();
-            return [rgb[0], rgb[1], rgb[2], 255];
+            let bytes = crate::math::color_to_bytes(final_color);
+            return [bytes[0], bytes[1], bytes[2], 255];
         })
         .collect::<Vec<[u8; 4]>>()
         .into_flattened()

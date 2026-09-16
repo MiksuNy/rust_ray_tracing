@@ -1,7 +1,6 @@
 use crate::{
     bvh::Node,
     log_info,
-    math::{mat4::*, vec3::*},
     renderer::{Renderer, backend::gpu::texture::Texture},
     scene::{Camera, Material, Scene, Triangle},
 };
@@ -137,7 +136,7 @@ impl State {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba16Unorm,
+            format: wgpu::TextureFormat::Rgba32Float,
             usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
@@ -151,7 +150,7 @@ impl State {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::ReadWrite,
-                        format: wgpu::TextureFormat::Rgba16Unorm,
+                        format: wgpu::TextureFormat::Rgba32Float,
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -452,11 +451,7 @@ struct UniformBuffers {
 
 impl UniformBuffers {
     fn new(device: &wgpu::Device, scene: &Scene) -> Self {
-        let uniform_camera = UniformCamera {
-            look_at: scene.camera.look_at,
-            position: scene.camera.position,
-            _pad: [0; 4],
-        };
+        let uniform_camera = UniformCamera::new(scene.camera.look_at, scene.camera.position);
         let camera_buffer = Buffer::create_uniform_buffer(device, 0, &[uniform_camera]);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -480,18 +475,28 @@ impl UniformBuffers {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 struct UniformCamera {
-    look_at: Mat4f,
-    position: Vec3f,
+    look_at: glam::Mat4,
+    position: glam::Vec3,
     _pad: [u8; 4],
+}
+
+impl UniformCamera {
+    pub fn new(look_at: glam::Mat4, position: glam::Vec3) -> Self {
+        Self {
+            look_at,
+            position,
+            _pad: [0; 4],
+        }
+    }
 }
 
 impl From<Camera> for UniformCamera {
     fn from(camera: Camera) -> Self {
-        return Self {
+        Self {
             look_at: camera.look_at,
             position: camera.position,
             _pad: [0; 4],
-        };
+        }
     }
 }
 

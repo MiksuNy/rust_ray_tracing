@@ -1,7 +1,7 @@
 enable wgpu_binding_array;
 
 @group(0) @binding(0)
-var output_texture: texture_storage_2d<rgba16unorm, read_write>;
+var rt_texture: texture_storage_2d<rgba32float, read_write>;
 
 @group(1) @binding(0)
 var <storage, read> triangles: array<Triangle>;
@@ -102,7 +102,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rng_seed = renderer_info.current_sample * 6023u + (757283u * global_id.x + 872653746u * global_id.y);
     let tex_coords = vec2<u32>(global_id.xy);
 
-    let texture_dimensions = vec2<f32>(f32(textureDimensions(output_texture).x), f32(textureDimensions(output_texture).y));
+    let texture_dimensions = vec2<f32>(f32(textureDimensions(rt_texture).x), f32(textureDimensions(rt_texture).y));
     let aspect = texture_dimensions.x / texture_dimensions.y;
     let screen_coords = vec2<f32>(
         ((f32(global_id.x) / texture_dimensions.x) * 2.0f - 1.0f) * aspect,
@@ -112,23 +112,20 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var ray = Ray();
     ray.origin = camera.position;
     let jitter = vec2<f32>(rand_f32(&rng_seed) * 2.0f - 1.0f, rand_f32(&rng_seed) * 2.0f - 1.0f) * 0.0005f;
-    ray.direction = normalize(camera.look_at * vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f)).xyz;
+    ray.direction = (camera.look_at * normalize(vec4<f32>(-screen_coords.x + jitter.x, screen_coords.y + jitter.y, 1.0f, 0.0f))).xyz;
 
     let rt_color = trace(&ray, &rng_seed, renderer_info.max_ray_depth);
-    let accumulation_color = textureLoad(output_texture, tex_coords).rgb;
+    let accumulation_color = textureLoad(rt_texture, tex_coords).rgb;
     let final_color = mix(accumulation_color, rt_color, 1.0f / f32(renderer_info.current_sample));
 
     //let final_color = debug_bvh(ray, 300.0f);
 
-    textureStore(output_texture, tex_coords, vec4<f32>(final_color, 1.0f));
+    textureStore(rt_texture, tex_coords, vec4<f32>(final_color, 1.0f));
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
     var ray_color = vec3<f32>(1.0f);
     var incoming_light = vec3<f32>(0.0f);
-
-    var prev_hit_point = ray.origin;
-    var transmitted_distance = 0.0f;
 
     var curr_ray_depth: u32 = 0u;
     while curr_ray_depth < max_ray_depth {
@@ -139,13 +136,6 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
 
             var hit_material = materials[hit_info.material_id];
             set_surface_properties(&hit_info, &hit_material);
-
-            var transmitted_distance = hit_info.distance;
-            if hit_info.front_face {
-                prev_hit_point = hit_info.point;
-            } else {
-                transmitted_distance = distance(hit_info.point, prev_hit_point);
-            }
 
             if hit_material.transparency < rand_f32(rng_seed) {
                 (*ray).origin = hit_info.point + (*ray).direction * EPSILON;
@@ -173,15 +163,6 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
                     if dot(new_dir, hit_info.normal) > 0.0f {
                         break;
                     }
-                    var absorption = vec3<f32>(1.0f);
-                    if !hit_info.front_face {
-                        absorption = vec3<f32>(
-                            exp(-(1.0f - hit_material.base_color.r) * transmitted_distance),
-                            exp(-(1.0f - hit_material.base_color.g) * transmitted_distance),
-                            exp(-(1.0f - hit_material.base_color.b) * transmitted_distance),
-                        );
-                    }
-                    ray_color *= absorption;
                 } else {
                     new_dir = diffuse_dir;
                 }
@@ -352,55 +333,60 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
     var hit_info = HitInfo();
     hit_info.distance = 1e30f;
 
-    var stack = array<Node, 16u>();
-    var node = bvh_nodes[0u];
+    // Consider: Testing root here outside
+
+    var stack = array<u32, 16u>();
     var stack_ptr: u32 = 0u;
+    var node_idx: u32 = 1u;
 
     loop {
-        if node.num_tris > 0u {
-            for (var i = 0u; i < node.num_tris; i++) {
-                let temp_hit_info = intersect_tri(ray, triangles[node.first_tri_or_child + i]);
+        let left_node = bvh_nodes[node_idx];
+        let right_node = bvh_nodes[node_idx + 1u];
+
+        let dist_left = intersect_node(ray, left_node, hit_info.distance);
+        let dist_right = intersect_node(ray, right_node, hit_info.distance);
+
+        let hit_left = dist_left < 1e30f;
+        let hit_right = dist_right < 1e30f;
+
+        let intersect_left = hit_left && left_node.num_tris > 0u;
+        let intersect_right = hit_right && right_node.num_tris > 0u;
+
+        if intersect_left || intersect_right {
+            let first = select(right_node.first_tri_or_child, left_node.first_tri_or_child, intersect_left);
+            var end: u32;
+            if !intersect_right {
+                end = left_node.first_tri_or_child + left_node.num_tris;
+            } else {
+                end = right_node.first_tri_or_child + right_node.num_tris;
+            }
+
+            for (var i = first; i < end; i++) {
+                let temp_hit_info = intersect_tri(ray, triangles[i]);
                 if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
                     hit_info = temp_hit_info;
                 }
             }
-            if stack_ptr == 0u {
-                break;
-            } else {
-                stack_ptr--;
-                node = stack[stack_ptr];
-            }
-            continue;
         }
 
-        var child_1 = bvh_nodes[node.first_tri_or_child];
-        var child_2 = bvh_nodes[node.first_tri_or_child + 1u];
-        var dist_1 = intersect_node(ray, child_1, hit_info.distance);
-        var dist_2 = intersect_node(ray, child_2, hit_info.distance);
+        let traverse_left = hit_left && left_node.num_tris == 0u;
+        let traverse_right = hit_right && right_node.num_tris == 0u;
 
-        if dist_1 > dist_2 {
-            let temp_dist = dist_1;
-            dist_1 = dist_2;
-            dist_2 = temp_dist;
-
-            let temp_child = child_1;
-            child_1 = child_2;
-            child_2 = temp_child;
-        }
-
-        if dist_1 == 1e30f {
-            if stack_ptr == 0u {
-                break;
+        if traverse_left || traverse_right {
+            if traverse_left && traverse_right {
+                let left_closer = dist_left < dist_right;
+                node_idx = select(right_node.first_tri_or_child, left_node.first_tri_or_child, left_closer);
+                stack[stack_ptr] = select(left_node.first_tri_or_child, right_node.first_tri_or_child, left_closer);
+                stack_ptr++;
             } else {
-                stack_ptr--;
-                node = stack[stack_ptr];
+                node_idx = select(right_node.first_tri_or_child, left_node.first_tri_or_child, traverse_left);
             }
         } else {
-            node = child_1;
-            if dist_2 < 1e30f {
-                stack[stack_ptr] = child_2;
-                stack_ptr++;
+            if stack_ptr == 0u {
+                break;
             }
+            stack_ptr--;
+            node_idx = stack[stack_ptr];
         }
     }
 
@@ -408,54 +394,65 @@ fn traverse_bvh(ray: Ray) -> HitInfo {
 }
 
 fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
-    var stack = array<Node, 16u>();
-    var node = bvh_nodes[0u];
+    var hit_info = HitInfo();
+    hit_info.distance = 1e30f;
+
+    var stack = array<u32, 16u>();
     var stack_ptr: u32 = 0u;
+    var node_idx: u32 = 1u; 
 
     var debug_value = 0.0f;
     loop {
         debug_value += 1.0f;
-        if node.num_tris > 0u {
-            for (var i = 0u; i < node.num_tris; i++) {
-                debug_value += 1.1f;
-            }
-            if stack_ptr == 0u {
-                break;
+
+        let left_node = bvh_nodes[node_idx];
+        let right_node = bvh_nodes[node_idx + 1u];
+
+        let dist_left = intersect_node(ray, left_node, hit_info.distance);
+        let dist_right = intersect_node(ray, right_node, hit_info.distance);
+
+        let hit_left = dist_left < 1e30f;
+        let hit_right = dist_right < 1e30f;
+
+        let intersect_left = hit_left && left_node.num_tris > 0u;
+        let intersect_right = hit_right && right_node.num_tris > 0u;
+
+        if intersect_left || intersect_right {
+            let first = select(right_node.first_tri_or_child, left_node.first_tri_or_child, intersect_left);
+            var end: u32;
+            if !intersect_right {
+                end = left_node.first_tri_or_child + left_node.num_tris;
             } else {
-                stack_ptr--;
-                node = stack[stack_ptr];
+                end = right_node.first_tri_or_child + right_node.num_tris;
             }
-            continue;
+            debug_value += f32(end - first) * 1.1f;
+
+            for (var i = first; i < end; i++) {
+                let temp_hit_info = intersect_tri(ray, triangles[i]);
+                if temp_hit_info.has_hit && temp_hit_info.distance < hit_info.distance {
+                    hit_info = temp_hit_info;
+                }
+            }
         }
 
-        var child_1 = bvh_nodes[node.first_tri_or_child];
-        var child_2 = bvh_nodes[node.first_tri_or_child + 1u];
-        var dist_1 = intersect_node(ray, child_1, 1e30f);
-        var dist_2 = intersect_node(ray, child_2, 1e30f);
+        let traverse_left = hit_left && left_node.num_tris == 0u;
+        let traverse_right = hit_right && right_node.num_tris == 0u;
 
-        if dist_1 > dist_2 {
-            let temp_dist = dist_1;
-            dist_1 = dist_2;
-            dist_2 = temp_dist;
-
-            let temp_child = child_1;
-            child_1 = child_2;
-            child_2 = temp_child;
-        }
-
-        if dist_1 == 1e30f {
-            if stack_ptr == 0u {
-                break;
+        if traverse_left || traverse_right {
+            if traverse_left && traverse_right {
+                let left_closer = dist_left < dist_right;
+                node_idx = select(right_node.first_tri_or_child, left_node.first_tri_or_child, left_closer);
+                stack[stack_ptr] = select(left_node.first_tri_or_child, right_node.first_tri_or_child, left_closer);
+                stack_ptr++;
             } else {
-                stack_ptr--;
-                node = stack[stack_ptr];
+                node_idx = select(right_node.first_tri_or_child, left_node.first_tri_or_child, traverse_left);
             }
         } else {
-            node = child_1;
-            if dist_2 < 1e30f {
-                stack[stack_ptr] = child_2;
-                stack_ptr++;
+            if stack_ptr == 0u {
+                break;
             }
+            stack_ptr--;
+            node_idx = stack[stack_ptr];
         }
     }
 
@@ -484,17 +481,18 @@ fn turbo_colormap(x_ptr: ptr<function, f32>) -> vec3<f32> {
     );
 }
 
-fn xor_shift(input: ptr<function, u32>) -> u32 {
-    var x = *input;
-    x = x ^ (x << 13);
-    x = x ^ (x >> 17);
-    x = x ^ (x << 5);
-    *input = x;
-    return x;
+// https://www.reedbeta.com/blog/quick-and-easy-gpu-random-numbers-in-d3d11/
+fn wang_hash(seed: ptr<function, u32>) -> u32 {
+    *seed = (*seed ^ 61u) ^ (*seed >> 16u);
+    *seed *= 9;
+    *seed = *seed ^ (*seed >> 4u);
+    *seed *= 0x27d4eb2d;
+    *seed = *seed ^ (*seed >> 15u);
+    return *seed;
 }
 
 fn rand_f32(input: ptr<function, u32>) -> f32 {
-    return f32(xor_shift(input)) / f32(0xFFFFFFFF);
+    return f32(wang_hash(input)) / f32(0xFFFFFFFF);
 }
 
 fn sample_texture(index: u32, uv: vec2<f32>) -> vec4<f32> {

@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
+use crate::bvh::AABB;
 use crate::bvh::BVH;
+use crate::bvh::Bounds;
 use crate::loader::obj::OBJ;
 use crate::log_error;
-use crate::math::mat4::Mat4f;
-use crate::math::vec::*;
-use crate::math::vec3::*;
 use crate::texture::Texture;
 
 /// Representation of a 3D scene for use in the ray tracer.
@@ -87,9 +86,9 @@ impl From<OBJ> for Scene {
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 pub struct Vertex {
-    pub position: Vec3f,
+    pub position: glam::Vec3,
     pub tex_coord_x: f32,
-    pub normal: Vec3f,
+    pub normal: glam::Vec3,
     pub tex_coord_y: f32,
 }
 
@@ -103,7 +102,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
+    pub fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
         return Self {
             vertices,
             material_id,
@@ -111,29 +110,71 @@ impl Triangle {
         };
     }
 
-    pub fn bounds_mid(&self) -> Vec3f {
-        let mut bounds_min = Vec3f::from(f32::MAX);
-        let mut bounds_max = Vec3f::from(-f32::MAX);
+    pub fn surface_area(&self) -> f32 {
+        let e_1 = self.vertices[1].position - self.vertices[0].position;
+        let e_2 = self.vertices[2].position - self.vertices[0].position;
+        let e_3 = glam::Vec3::cross(e_1, e_2);
+        return e_3.length() / 2.0;
+    }
 
-        for vertex in self.vertices {
-            for i in 0..3 {
-                bounds_min.data[i] = f32::min(bounds_min.data[i], vertex.position.data[i]);
-                bounds_max.data[i] = f32::max(bounds_max.data[i], vertex.position.data[i]);
-            }
+    // https://github.com/BoyBaykiller/IDKEngine/blob/b2e9c3e3e2f3098a1e907ccbb349f18b49dee7ce/IDKEngine/Source/Shapes/Triangle.cs#L47-L92
+    pub fn split(&self, axis: usize, position: f32) -> (Bounds, Bounds) {
+        let split_edge = |a: glam::Vec3, b: glam::Vec3| -> glam::Vec3 {
+            let t = (position - a.to_array()[axis]) / (b.to_array()[axis] - a.to_array()[axis]);
+            return a + (b - a) * t;
+        };
+
+        let mut left_bounds = Bounds::default();
+        let mut right_bounds = Bounds::default();
+
+        let q_0 = self.vertices[0].position.to_array()[axis] <= position;
+        let q_1 = self.vertices[1].position.to_array()[axis] <= position;
+        let q_2 = self.vertices[2].position.to_array()[axis] <= position;
+
+        if q_0 {
+            left_bounds.grow_by_position(self.vertices[0].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[0].position);
+        }
+        if q_1 {
+            left_bounds.grow_by_position(self.vertices[1].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[1].position);
+        }
+        if q_2 {
+            left_bounds.grow_by_position(self.vertices[2].position);
+        } else {
+            right_bounds.grow_by_position(self.vertices[2].position);
         }
 
-        return (bounds_min + bounds_max) / 2.0;
+        if q_0 ^ q_1 {
+            let m = split_edge(self.vertices[0].position, self.vertices[1].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+        if q_1 ^ q_2 {
+            let m = split_edge(self.vertices[1].position, self.vertices[2].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+        if q_2 ^ q_0 {
+            let m = split_edge(self.vertices[2].position, self.vertices[0].position);
+            left_bounds.grow_by_position(m);
+            right_bounds.grow_by_position(m);
+        }
+
+        return (left_bounds, right_bounds);
     }
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, align(16))]
 pub struct Material {
-    pub base_color: Vec3f,
+    pub base_color: glam::Vec3,
     pub transmission: f32,
-    pub specular_tint: Vec3f,
+    pub specular_tint: glam::Vec3,
     pub ior: f32,
-    pub emission: Vec3f,
+    pub emission: glam::Vec3,
     pub roughness: f32,
     pub metallic: f32,
     pub transparency: f32,
@@ -148,11 +189,11 @@ pub struct Material {
 impl Default for Material {
     fn default() -> Self {
         return Self {
-            base_color: Vec3f::from(0.8),
+            base_color: glam::Vec3::new(0.8, 0.8, 0.8),
             transmission: 0.0,
-            specular_tint: Vec3f::from(1.0),
+            specular_tint: glam::Vec3::new(1.0, 1.0, 1.0),
             ior: 1.45,
-            emission: Vec3f::new(0.0, 0.0, 0.0),
+            emission: glam::Vec3::new(0.0, 0.0, 0.0),
             roughness: 1.0,
             metallic: 0.0,
             transparency: 1.0,
@@ -170,26 +211,31 @@ impl Default for Material {
 pub struct Camera {
     pub pitch: f32,
     pub yaw: f32,
-    pub position: Vec3f,
-    pub forward: Vec3f,
-    pub up: Vec3f,
-    pub right: Vec3f,
-    pub look_at: Mat4f,
+    pub position: glam::Vec3,
+    pub forward: glam::Vec3,
+    pub up: glam::Vec3,
+    pub right: glam::Vec3,
+    pub look_at: glam::Mat4,
 }
 
 impl Camera {
     pub fn update_view(&mut self) {
-        let direction = Vec3f::new(
+        let direction = glam::Vec3::new(
             f32::cos(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
             f32::sin(f32::to_radians(self.pitch)),
             f32::sin(f32::to_radians(self.yaw)) * f32::cos(f32::to_radians(self.pitch)),
         );
-        let world_up = Vec3f::new(0.0, 1.0, 0.0);
+        let world_up = glam::Vec3::new(0.0, 1.0, 0.0);
 
-        self.forward = direction.normalized();
-        self.right = Vec3f::cross(world_up, self.forward).normalized();
-        self.up = Vec3f::cross(self.forward, self.right);
+        self.forward = direction.normalize();
+        self.right = glam::Vec3::cross(world_up, self.forward).normalize();
+        self.up = glam::Vec3::cross(self.forward, self.right);
 
-        self.look_at = Mat4f::look_at(self.position, self.position + self.forward, self.up);
+        self.look_at = glam::camera::rh::view::look_at_mat4(
+            self.position,
+            self.position + self.forward,
+            self.up,
+        )
+        .transpose();
     }
 }
