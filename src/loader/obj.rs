@@ -186,6 +186,16 @@ impl OBJ {
                             new_material.1.transparency =
                                 attribute.next().unwrap().parse().unwrap();
                         }
+                        "aniso" => {
+                            new_material.1.anisotropy = attribute.next().unwrap().parse().unwrap();
+                        }
+                        "Pc" => {
+                            new_material.1.clearcoat = attribute.next().unwrap().parse().unwrap();
+                        }
+                        "Pcr" => {
+                            new_material.1.clearcoat_roughness =
+                                attribute.next().unwrap().parse().unwrap();
+                        }
                         "map_Kd" => {
                             if let Some(texture_path) =
                                 Self::get_resource_path(path, attribute.next().unwrap())

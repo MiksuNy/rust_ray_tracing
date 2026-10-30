@@ -1,3 +1,8 @@
+/* References:
+    [Sampling the GGX Distribution of Visible Normals] https://jcgt.org/published/0007/04/01/paper.pdf
+    [knightcrawler25's Disney BSDF GLSL implementation] https://github.com/knightcrawler25/GLSL-PathTracer/blob/master/src/shaders/common/disney.glsl
+*/
+
 enable wgpu_binding_array;
 
 @group(0) @binding(0)
@@ -7,15 +12,18 @@ var rt_texture: texture_storage_2d<rgba32float, read_write>;
 var <storage, read> triangles: array<Triangle>;
 
 @group(1) @binding(1)
-var <storage, read> bvh_nodes: array<Node>;
+var <storage, read> emissive_triangles: array<u32>;
 
 @group(1) @binding(2)
-var <storage, read> materials: array<Material>;
+var <storage, read> bvh_nodes: array<Node>;
 
 @group(1) @binding(3)
-var textures: binding_array<texture_2d<f32>, 128>;
+var <storage, read> materials: array<Material>;
 
 @group(1) @binding(4)
+var textures: binding_array<texture_2d<f32>, 128>;
+
+@group(1) @binding(5)
 var textures_array_sampler: sampler;
 
 @group(2) @binding(0)
@@ -24,6 +32,7 @@ var <uniform> camera: Camera;
 var <immediate> renderer_info: RendererInfo;
 
 const PI = 3.1415926535f;
+const INV_PI = 0.3183098862f;
 const TWO_PI = 6.283185307f;
 const PI_OVER_2 = 1.5707963268f;
 const PI_OVER_4 = 0.7853981634f;
@@ -48,6 +57,11 @@ struct Material {
     roughness: f32,
     metallic: f32,
     transparency: f32,
+    anisotropy: f32,
+    clearcoat: f32,
+    clearcoat_roughness: f32,
+    a_x: f32,
+    a_y: f32,
     base_color_tex_id: u32,
     transparency_tex_id: u32,
     roughness_tex_id: u32,
@@ -73,6 +87,7 @@ struct Vertex {
 struct Triangle {
     vertices: array<Vertex, 3>,
     material_id: u32,
+    triangle_id: u32,
 }
 
 struct Ray {
@@ -81,20 +96,16 @@ struct Ray {
 }
 
 struct HitInfo {
-    has_hit: bool,
+    tbn: mat3x3<f32>,
     point: vec3<f32>,
     normal: vec3<f32>,
-    distance: f32,
     uv: vec2<f32>,
-    material_id: u32,
+    has_hit: bool,
     front_face: bool,
-    tbn: mat3x3<f32>
-}
-
-struct BSDFType {
-    specular: bool,
-    transmitted: bool,
-    diffuse: bool
+    material_id: u32,
+    triangle_id: u32,
+    distance: f32,
+    eta: f32,
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -124,139 +135,393 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 
 fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u32) -> vec3<f32> {
-    var ray_color = vec3<f32>(1.0f);
-    var incoming_light = vec3<f32>(0.0f);
+    var ray_albedo = vec3<f32>(1.0f);
+    var ray_throughput = vec3<f32>(0.0f);
 
     var curr_ray_depth: u32 = 0u;
     while curr_ray_depth < max_ray_depth {
         var hit_info = traverse_bvh(*ray);
 
         if hit_info.has_hit {
-            curr_ray_depth += 1u;
+            var material = materials[hit_info.material_id];
+            set_surface_properties((*ray).direction, &hit_info, &material);
 
-            var hit_material = materials[hit_info.material_id];
-            set_surface_properties(&hit_info, &hit_material);
-
-            if hit_material.transparency < rand_f32(rng_seed) {
+            if material.transparency < rand_f32(rng_seed) {
                 (*ray).origin = hit_info.point + (*ray).direction * EPSILON;
                 continue;
             }
 
-            let alpha = clamp(hit_material.roughness * hit_material.roughness, EPSILON, 1.0f);
-            let sampled_normal = to_world(hit_info.tbn, sample_ggx_vndf(to_local(hit_info.tbn, -(*ray).direction), alpha, alpha, rng_seed));
+            var l = vec3<f32>(0.0f);
+            var pdf: f32;
+            let f = sample_disney(hit_info, material, -(*ray).direction, hit_info.normal, &l, &pdf, rng_seed);
 
-            var f0 = vec3<f32>(pow(1.0f - hit_material.ior, 2) / pow(1.0f + hit_material.ior, 2));
-            f0 = mix(f0, hit_material.base_color, hit_material.metallic);
-            let fresnel = schlick_fresnel(dot(sampled_normal, -(*ray).direction), f0);
+            ray_throughput += material.emission * ray_albedo;
 
-            let specular_dir = normalize(reflect((*ray).direction, sampled_normal));
-            let transmitted_dir = normalize(refract((*ray).direction, sampled_normal, hit_material.ior));
-            let diffuse_dir = normalize(to_world(hit_info.tbn, cosine_sample_hemisphere(rng_seed)));
-
-            let bsdf_type = select_bsdf(hit_material, rng_seed);
-
-            var new_dir: vec3<f32>;
-            if length(fresnel) < rand_f32(rng_seed) && !bsdf_type.specular {
-                ray_color *= hit_material.base_color;
-                if bsdf_type.transmitted {
-                    new_dir = transmitted_dir;
-                    if dot(new_dir, hit_info.normal) > 0.0f {
-                        break;
-                    }
-                } else {
-                    new_dir = diffuse_dir;
-                }
+            if pdf > 0.0f {
+                ray_albedo *= f / pdf;
             } else {
-                if bsdf_type.specular {
-                    ray_color *= fresnel;
-                }
-
-                new_dir = specular_dir;
-                if dot(new_dir, hit_info.normal) < 0.0f {
-                    break;
-                }
+                break;
             }
 
             // Russian roulette
-            var rr_probability = 1.0f;
-            if curr_ray_depth >= 4 {
-                rr_probability = max(ray_color.r, max(ray_color.b, ray_color.g));
-                if rr_probability < rand_f32(rng_seed) {
+            if curr_ray_depth >= 2u {
+                let q = min(max(ray_albedo.r, max(ray_albedo.g, ray_albedo.b)) + 0.001f, 0.95f);
+                if rand_f32(rng_seed) > q {
                     break;
                 }
+                ray_albedo /= q;
             }
-            ray_color /= rr_probability;
 
-            incoming_light += hit_material.emission * ray_color;
+            (*ray).origin = hit_info.point + l * EPSILON;
+            (*ray).direction = l;
 
-            (*ray).origin = hit_info.point + new_dir * EPSILON;
-            (*ray).direction = new_dir;
+            curr_ray_depth += 1u;
         } else {
             let sky_color = vec3<f32>(1.0f, 1.0f, 1.0f);
             let sky_strength = vec3<f32>(1.0f);
 
-            ray_color *= sky_color;
-            incoming_light += sky_strength * ray_color;
+            ray_albedo *= sky_color;
+            ray_throughput += sky_strength * ray_albedo;
 
             break;
         }
     }
 
-    if curr_ray_depth == 0u {
-        return incoming_light;
-    } else {
-        return incoming_light / f32(curr_ray_depth);
-    }
+    return select(ray_throughput / f32(curr_ray_depth), ray_throughput, curr_ray_depth == 0u);
 }
 
-fn select_bsdf(material: Material, rng_seed: ptr<function, u32>) -> BSDFType {
-    var bsdf_type = BSDFType();
+fn tint_colors(material: Material, eta: f32, f_0: ptr<function, f32>, c_spec_0: ptr<function, vec3<f32>>) {
+    let lum = luminance(material.base_color);
+    let c_tint = select(vec3<f32>(1.0f), material.base_color / lum, lum > 0.0f);
 
-    let specular_chance = material.metallic;
-    let transmission_chance = material.transmission;
-    let diffuse_chance = 1.0f - specular_chance - transmission_chance;
+    *f_0 = (1.0f - eta) / (1.0f + eta);
+    *f_0 *= *f_0;
 
-    let r = rand_f32(rng_seed);
-    if specular_chance > r {
-        bsdf_type.specular = true;
-    } else if specular_chance + transmission_chance > r {
-        bsdf_type.transmitted = true;
-    } else {
-        bsdf_type.diffuse = true;
+    *c_spec_0 = *f_0 * mix(vec3<f32>(1.0f), c_tint, material.specular_tint);
+}
+
+fn sample_disney(hit_info: HitInfo, material: Material, v_in: vec3<f32>, n: vec3<f32>, l: ptr<function, vec3<f32>>, pdf: ptr<function, f32>, rng_seed: ptr<function, u32>) -> vec3<f32> {
+    *pdf = 0.0f;
+
+    var v = to_local(hit_info.tbn, v_in);
+
+    var f_0: f32;
+    var c_spec_0: vec3<f32>;
+    tint_colors(material, hit_info.eta, &f_0, &c_spec_0);
+
+    let dielectric_wt = (1.0f - material.metallic) * (1.0f - material.transmission);
+    let metal_wt = material.metallic;
+    let glass_wt = (1.0f - material.metallic) * material.transmission;
+
+    let schlick_wt = schlick_weight(v.z);
+
+    var diffuse_pr = dielectric_wt * luminance(material.base_color);
+    var dielectric_pr = dielectric_wt * luminance(mix(c_spec_0, vec3<f32>(1.0f), schlick_wt));
+    var metal_pr = metal_wt * luminance(mix(material.base_color, vec3<f32>(1.0f), schlick_wt));
+    var glass_pr = glass_wt;
+    var clearcoat_pr = 0.25f * material.clearcoat;
+
+    let inv_total_wt = 1.0f / (diffuse_pr + dielectric_pr + metal_pr + glass_pr + clearcoat_pr);
+    diffuse_pr *= inv_total_wt;
+    dielectric_pr *= inv_total_wt;
+    metal_pr *= inv_total_wt;
+    glass_pr *= inv_total_wt;
+    clearcoat_pr *= inv_total_wt;
+
+    var cdf = array<f32, 5u>();
+    cdf[0] = diffuse_pr;
+    cdf[1] = cdf[0] + dielectric_pr;
+    cdf[2] = cdf[1] + metal_pr;
+    cdf[3] = cdf[2] + glass_pr;
+    cdf[4] = cdf[3] + clearcoat_pr;
+
+    var r = rand_f32(rng_seed);
+    if r < cdf[0] { // Diffuse
+        *l = cosine_sample_hemisphere(rng_seed);
+    } else if r < cdf[2] {
+        var h = sample_ggx_vndf(v, material.a_x, material.a_y, rng_seed);
+
+        if h.z < 0.0f {
+            h = -h;
+        }
+
+        *l = normalize(reflect(-v, h));
+    } else if r < cdf[3] { // Specular
+        var h = sample_ggx_vndf(v, material.a_x, material.a_y, rng_seed);
+        let f = dielectric_fresnel(abs(dot(v, h)), hit_info.eta);
+
+        if h.z < 0.0f {
+            h = -h;
+        }
+
+        r = (r - cdf[2]) / (cdf[3] - cdf[2]);
+
+        if r < f {
+            *l = normalize(reflect(-v, h));
+        } else {
+            *l = normalize(refract(-v, h, hit_info.eta));
+        }
+    } else { // Clearcoat
+        var h = sample_gtr_1(material.clearcoat_roughness, rng_seed);
+
+        if h.z < 0.0f {
+            h = -h;
+        }
+
+        *l = normalize(reflect(-v, h));
     }
 
-    return bsdf_type;
+    *l = normalize(to_world(hit_info.tbn, *l));
+    v = normalize(to_world(hit_info.tbn, v));
+
+    return eval_disney(hit_info, material, v, n, *l, pdf);
+}
+
+fn eval_disney(hit_info: HitInfo, material: Material, v_in: vec3<f32>, n: vec3<f32>, l_in: vec3<f32>, pdf: ptr<function, f32>) -> vec3<f32> {
+    *pdf = 0.0f;
+    var f = vec3<f32>(0.0f);
+
+    let l = to_local(hit_info.tbn, l_in);
+    let v = to_local(hit_info.tbn, v_in);
+
+    var h: vec3<f32>;
+    if l.z > 0.0f {
+        h = normalize(l + v);
+    } else {
+        h = normalize(l + v * hit_info.eta);
+    }
+
+    if h.z < 0.0f {
+        h = -h;
+    }
+
+    var f_0: f32;
+    var c_spec_0: vec3<f32>;
+    tint_colors(material, hit_info.eta, &f_0, &c_spec_0);
+
+    let dielectric_wt = (1.0f - material.metallic) * (1.0f - material.transmission);
+    let metal_wt = material.metallic;
+    let glass_wt = (1.0f - material.metallic) * material.transmission;
+
+    let schlick_wt = schlick_weight(v.z);
+
+    var diffuse_pr = dielectric_wt * luminance(material.base_color);
+    var dielectric_pr = dielectric_wt * luminance(mix(c_spec_0, vec3<f32>(1.0f), schlick_wt));
+    var metal_pr = metal_wt * luminance(mix(material.base_color, vec3<f32>(1.0f), schlick_wt));
+    var glass_pr = glass_wt;
+    var clearcoat_pr = 0.25f * material.clearcoat;
+
+    let inv_total_wt = 1.0f / (diffuse_pr + dielectric_pr + metal_pr + glass_pr + clearcoat_pr);
+    diffuse_pr *= inv_total_wt;
+    dielectric_pr *= inv_total_wt;
+    metal_pr *= inv_total_wt;
+    glass_pr *= inv_total_wt;
+    clearcoat_pr *= inv_total_wt;
+
+    let should_reflect = l.z * v.z > 0.0f;
+
+    var tmp_pdf = 0.0f;
+    let v_dot_h = abs(dot(v, h));
+
+    if diffuse_pr > 0.0f && should_reflect {
+        f += eval_disney_diffuse(l, v, h, material, &tmp_pdf) * dielectric_wt;
+        *pdf += tmp_pdf * diffuse_pr;
+    }
+
+    if dielectric_pr > 0.0f && should_reflect {
+        let F = (dielectric_fresnel(v_dot_h, 1.0f / material.ior) - f_0) / (1.0f - f_0);
+
+        f += eval_disney_microfacet_reflection(l, v, h, mix(c_spec_0, vec3<f32>(1.0f), F), material, hit_info, &tmp_pdf) * dielectric_wt;
+        *pdf += tmp_pdf * dielectric_pr;
+    }
+
+    if metal_pr > 0.0f && should_reflect {
+        let F = mix(material.base_color, vec3<f32>(1.0f), schlick_weight(v_dot_h));
+
+        f += eval_disney_microfacet_reflection(l, v, h, F, material, hit_info, &tmp_pdf) * metal_wt;
+        *pdf += tmp_pdf * metal_pr;
+    }
+
+    if glass_pr > 0.0f {
+        let F = dielectric_fresnel(v_dot_h, hit_info.eta);
+
+        if should_reflect {
+            f += eval_disney_microfacet_reflection(l, v, h, vec3<f32>(F), material, hit_info, &tmp_pdf) * glass_wt;
+            *pdf += tmp_pdf * glass_pr * F;
+        } else {
+            f += eval_disney_microfacet_refraction(l, v, h, vec3<f32>(F), material, hit_info, &tmp_pdf) * glass_wt;
+            *pdf += tmp_pdf * glass_pr * (1.0f - F);
+        }
+    }
+
+    if clearcoat_pr > 0.0f && should_reflect {
+        f += eval_disney_clearcoat(l, v, h, material, &tmp_pdf) * 0.25f * material.clearcoat;
+        *pdf += tmp_pdf * clearcoat_pr;
+    }
+
+    return f * abs(l.z);
+}
+
+fn dielectric_fresnel(cos_theta_i: f32, eta: f32) -> f32 {
+    let sin_theta_t_sq = eta * eta * (1.0f - cos_theta_i * cos_theta_i);
+
+    if sin_theta_t_sq > 1.0f {
+        return 1.0f;
+    }
+
+    let cos_theta_t = sqrt(max(1.0f - sin_theta_t_sq, 0.0f));
+
+    let r_s = (eta * cos_theta_t - cos_theta_i) / (eta * cos_theta_t + cos_theta_i);
+    let r_p = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i + cos_theta_t);
+
+    return 0.5f * (r_s * r_s + r_p * r_p);
+}
+
+// TODO: Missing subsurface and sheen
+fn eval_disney_diffuse(l: vec3<f32>, v: vec3<f32>, h: vec3<f32>, material: Material, pdf: ptr<function, f32>) -> vec3<f32> {
+    *pdf = 0.0f;
+    if l.z <= 0.0f {
+        return vec3<f32>(0.0f);
+    }
+
+    let l_dot_h = dot(l, h);
+
+    let rr = 2.0f * material.roughness * l_dot_h * l_dot_h;
+
+    let f_l = schlick_weight(l.z);
+    let f_v = schlick_weight(v.z);
+    let f_retro = rr * (f_l + f_v + f_l * f_v * (rr - 1.0f));
+    let f_d = (1.0f - 0.5f * f_l) * (1.0f - 0.5f * f_v);
+
+    *pdf = l.z * INV_PI;
+    return INV_PI * material.base_color * (f_d + f_retro);
+}
+
+fn eval_disney_clearcoat(l: vec3<f32>, v: vec3<f32>, h: vec3<f32>, material: Material, pdf: ptr<function, f32>) -> vec3<f32> {
+    *pdf = 0.0f;
+    if l.z <= 0.0f {
+        return vec3<f32>(0.0f);
+    }
+
+    let v_dot_h = dot(v, h);
+
+    let f = mix(0.04f, 1.0f, schlick_weight(v_dot_h));
+    let d = gtr_1(h.z, material.clearcoat_roughness);
+    let g = smith_g(l.z, 0.25f) * smith_g(v.z, 0.25f);
+    let jacobian = 1.0f / (4.0f * v_dot_h);
+
+    *pdf = d * h.z * jacobian;
+    return vec3<f32>(f) * d * g;
+}
+
+fn eval_disney_microfacet_reflection(l: vec3<f32>, v: vec3<f32>, h: vec3<f32>, f: vec3<f32>, material: Material, hit_info: HitInfo, pdf: ptr<function, f32>) -> vec3<f32> {
+    *pdf = 0.0f;
+    if l.z <= 0.0f {
+        return vec3<f32>(0.0f);
+    }
+
+    let d = gtr_2_aniso(h.z, h.x, h.y, material.a_x, material.a_y);
+    let g_1 = smith_g_aniso(abs(v.z), v.x, v.y, material.a_x, material.a_y);
+    let g_2 = g_1 * smith_g_aniso(abs(l.z), l.x, l.y, material.a_x, material.a_y);
+
+    *pdf = g_1 * d / (4.0f * v.z);
+    return f * d * g_2 / (4.0f * l.z * v.z);
+}
+
+fn eval_disney_microfacet_refraction(l: vec3<f32>, v: vec3<f32>, h: vec3<f32>, f: vec3<f32>, material: Material, hit_info: HitInfo, pdf: ptr<function, f32>) -> vec3<f32> {
+    *pdf = 0.0f;
+    if l.z >= 0.0f {
+        return vec3<f32>(0.0f);
+    }
+
+    let l_dot_h = dot(l, h);
+    let v_dot_h = dot(v, h);
+
+    let d = gtr_2_aniso(h.z, h.x, h.y, material.a_x, material.a_y);
+    let g_1 = smith_g_aniso(abs(v.z), v.x, v.y, material.a_x, material.a_y);
+    let g_2 = g_1 * smith_g_aniso(abs(l.z), l.x, l.y, material.a_x, material.a_y);
+    var denom = l_dot_h + v_dot_h * hit_info.eta;
+    denom *= denom;
+    let eta_2 = hit_info.eta * hit_info.eta;
+    let jacobian = abs(l_dot_h) / denom;
+
+    *pdf = g_1 * max(0.0f, v_dot_h) * d * jacobian / v.z;
+    return pow(material.base_color, vec3<f32>(0.5f)) * (vec3<f32>(1.0f) - f) * d * g_2 * abs(v_dot_h) * jacobian * eta_2 / abs(l.z * v.z);
+}
+
+fn sqr(x: f32) -> f32 {
+    return x * x;
+}
+
+fn gtr_1(n_dot_h: f32, a: f32) -> f32 {
+    if a >= 1.0f {
+        return INV_PI;
+    }
+    let a_2 = a * a;
+    let t = 1.0f + (a_2 - 1.0f) * n_dot_h * n_dot_h;
+    return (a_2 - 1.0f) / (PI * log(a_2) * t);
+}
+
+fn gtr_2_aniso(n_dot_h: f32, h_dot_x: f32, h_dot_y: f32, a_x: f32, a_y: f32) -> f32 {
+    let a = h_dot_x / a_x;
+    let b = h_dot_y / a_y;
+    let c = a * a + b * b + n_dot_h * n_dot_h;
+    return 1.0f / (PI * a_x * a_y * c * c);
+}
+
+fn smith_g(n_dot_v: f32, alpha_g: f32) -> f32 {
+    let a = alpha_g * alpha_g;
+    let b = n_dot_v * n_dot_v;
+    return (2.0f * n_dot_v) / (n_dot_v + sqrt(a + b - a * b));
+}
+
+fn smith_g_aniso(n_dot_v: f32, v_dot_x: f32, v_dot_y: f32, a_x: f32, a_y: f32) -> f32 {
+    let a = v_dot_x * a_x;
+    let b = v_dot_y * a_y;
+    let c = n_dot_v;
+    return (2.0f * n_dot_v) / (n_dot_v + sqrt(a * a + b * b + c * c));
+}
+
+fn schlick_weight(u: f32) -> f32 {
+    let m = clamp(1.0f - u, 0.0f, 1.0f);
+    let m_2 = m * m;
+    return m_2 * m_2 * m;
 }
 
 // Helper function to set actual material properties and other parameters of the hit surface
-fn set_surface_properties(hit_info: ptr<function, HitInfo>, hit_material: ptr<function, Material>) {
-    if hit_info.front_face {
-        (*hit_material).ior = 1.0f / (*hit_material).ior;
-    }
+fn set_surface_properties(ray_dir: vec3<f32>, hit_info: ptr<function, HitInfo>, material: ptr<function, Material>) {
+    hit_info.eta = select(material.ior, 1.0f / material.ior, hit_info.front_face);
+
+    (*material).clearcoat_roughness = max(0.001f, material.clearcoat_roughness);
 
     // Base color
-    if hit_material.base_color_tex_id != 0xFFFFFFFF {
-        (*hit_material).base_color = pow(sample_texture(hit_material.base_color_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
+    if material.base_color_tex_id != 0xFFFFFFFF {
+        (*material).base_color = pow(sample_texture(material.base_color_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
     }
 
     // Transparency
-    if hit_material.transparency_tex_id != 0xFFFFFFFF {
-        (*hit_material).transparency = sample_texture(hit_material.transparency_tex_id, hit_info.uv).a;
+    if material.transparency_tex_id != 0xFFFFFFFF {
+        (*material).transparency = sample_texture(material.transparency_tex_id, hit_info.uv).a;
     }
 
     // Roughness
-    if hit_material.roughness_tex_id != 0xFFFFFFFF {
-        (*hit_material).roughness = sample_texture(hit_material.roughness_tex_id, hit_info.uv).g;
+    if material.roughness_tex_id != 0xFFFFFFFF {
+        let roughness = sample_texture(material.roughness_tex_id, hit_info.uv).g;
+        (*material).roughness = roughness;
     }
 
+    let aspect = sqrt(1.0f - material.anisotropy * 0.9f);
+    (*material).a_x = max(0.001f, sqr(material.roughness) / aspect);
+    (*material).a_y = max(0.001f, sqr(material.roughness) * aspect);
+
     // Metallic
-    if hit_material.metallic_tex_id != 0xFFFFFFFF {
-        (*hit_material).metallic = sample_texture(hit_material.metallic_tex_id, hit_info.uv).b;
+    if material.metallic_tex_id != 0xFFFFFFFF {
+        (*material).metallic = sample_texture(material.metallic_tex_id, hit_info.uv).b;
     }
 
     // Emission
-    if hit_material.emission_tex_id != 0xFFFFFFFF {
-        (*hit_material).emission = pow(sample_texture(hit_material.emission_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
+    if material.emission_tex_id != 0xFFFFFFFF {
+        (*material).emission = pow(sample_texture(material.emission_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
     }
 
     // Build ONB from geometric normal
@@ -265,8 +530,12 @@ fn set_surface_properties(hit_info: ptr<function, HitInfo>, hit_material: ptr<fu
     build_orthonormal_basis((*hit_info).normal, &tangent, &bitangent);
     (*hit_info).tbn = mat3x3<f32>(tangent, bitangent, (*hit_info).normal);
 
-    if hit_material.normal_tex_id != 0xFFFFFFFF {
-        (*hit_info).normal = normalize(to_world((*hit_info).tbn, sample_texture(hit_material.normal_tex_id, (*hit_info).uv).rgb * 2.0f - 1.0f));
+    // FIXME: Can cause a situation where a ray is reflected through a surface because this overrides the geometric normal
+    if material.normal_tex_id != 0xFFFFFFFF {
+        var texture_normal = normalize(sample_texture(material.normal_tex_id, (*hit_info).uv).xyz * 2.0f - 1.0f);
+
+        let orig_normal = hit_info.normal;
+        (*hit_info).normal = normalize(to_world(hit_info.tbn, texture_normal));
 
         // Rebuild ONB from texture normal
         build_orthonormal_basis((*hit_info).normal, &tangent, &bitangent);
@@ -306,8 +575,8 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     let n_0 = tri.vertices[0].normal;
     let n_1 = tri.vertices[1].normal;
     let n_2 = tri.vertices[2].normal;
-    let normal = n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v);
-    hit_info.normal = normalize(select(-normal, normal, front_face));
+    let normal = normalize(n_0 * (1.0f - u - v) + (n_1 * u) + (n_2 * v));
+    hit_info.normal = select(-normal, normal, front_face);
 
     let t_0 = vec2<f32>(tri.vertices[0].tex_coord_x, tri.vertices[0].tex_coord_y);
     let t_1 = vec2<f32>(tri.vertices[1].tex_coord_x, tri.vertices[1].tex_coord_y);
@@ -315,6 +584,7 @@ fn intersect_tri(ray: Ray, tri: Triangle) -> HitInfo {
     hit_info.uv = t_0 * (1.0f - u - v) + (t_1 * u) + (t_2 * v);
 
     hit_info.material_id = tri.material_id;
+    hit_info.triangle_id = tri.triangle_id;
 
     return hit_info;
 }
@@ -495,15 +765,25 @@ fn rand_f32(input: ptr<function, u32>) -> f32 {
     return f32(wang_hash(input)) / f32(0xFFFFFFFF);
 }
 
+fn rand_point_on_tri(tri: Triangle, rng_seed: ptr<function, u32>) -> vec3<f32> {
+    var u = rand_f32(rng_seed);
+    var v = rand_f32(rng_seed);
+    if u + v > 1.0f {
+        u = 1.0f - u;
+        v = 1.0f - v;
+    }
+    return tri.vertices[0].position + u * (tri.vertices[1].position - tri.vertices[0].position) + v * (tri.vertices[2].position - tri.vertices[0].position);
+}
+
 fn sample_texture(index: u32, uv: vec2<f32>) -> vec4<f32> {
     return textureSampleLevel(textures[index], textures_array_sampler, uv, 0.0f);
 }
 
-fn sample_ggx_vndf(ve: vec3<f32>, ax: f32, ay: f32, rng_seed: ptr<function, u32>) -> vec3<f32> {
+fn sample_ggx_vndf(ve: vec3<f32>, a_x: f32, a_y: f32, rng_seed: ptr<function, u32>) -> vec3<f32> {
     let u1 = rand_f32(rng_seed);
     let u2 = rand_f32(rng_seed);
 
-    let Vh = normalize(vec3<f32>(ax * ve.x, ay * ve.y, ve.z));
+    let Vh = normalize(vec3<f32>(a_x * ve.x, a_y * ve.y, ve.z));
 
     let lensq = Vh.x * Vh.x + Vh.y * Vh.y;
     let T1 = select(vec3<f32>(1.0f, 0.0f, 0.0f), vec3<f32>(-Vh.y, Vh.x, 0.0f) * inverseSqrt(lensq), lensq > 0.0f);
@@ -518,39 +798,45 @@ fn sample_ggx_vndf(ve: vec3<f32>, ax: f32, ay: f32, rng_seed: ptr<function, u32>
 
     let Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0f, 1.0f - t1 * t1 - t2 * t2)) * Vh;
 
-    let Ne = normalize(vec3<f32>(ax * Nh.x, ay * Nh.y, max(0.0f, Nh.z)));
+    let Ne = normalize(vec3<f32>(a_x * Nh.x, a_y * Nh.y, max(0.0f, Nh.z)));
     return Ne;
 }
 
-// https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#ConcentricSampleDisk
-fn concentric_sample_disk(u: vec2<f32>) -> vec2<f32> {
-    let u_offset = 2.0f * u - vec2<f32>(1.0f);
-    if u_offset.x == 0.0f && u_offset.y == 0.0f {
-        return vec2<f32>(0.0f);
-    }
-    var theta: f32;
-    var r: f32;
-    if abs(u_offset.x) > abs(u_offset.y) {
-        r = u_offset.x;
-        theta = PI_OVER_4 * (u_offset.y / u_offset.x);
-    } else {
-        r = u_offset.y;
-        theta = PI_OVER_2 - PI_OVER_4 * (u_offset.x / u_offset.y);
-    }
-    return r * vec2<f32>(cos(theta), sin(theta));
+fn sample_gtr_1(rgh: f32, rng_seed: ptr<function, u32>) -> vec3<f32> {
+    let r_1 = rand_f32(rng_seed);
+    let r_2 = rand_f32(rng_seed);
+
+    let a = max(0.001f, rgh);
+    let a_2 = a * a;
+
+    let phi = r_1 * TWO_PI;
+
+    let cos_theta = sqrt((1.0f - pow(a_2, 1.0f - r_2)) / (1.0f - a_2));
+    let sin_theta = clamp(sqrt(1.0f - (cos_theta * cos_theta)), 0.0f, 1.0f);
+    let sin_phi = sin(phi);
+    let cos_phi = cos(phi);
+
+    return vec3<f32>(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 }
 
-// https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#CosineSampleHemisphere
 fn cosine_sample_hemisphere(rng_seed: ptr<function, u32>) -> vec3<f32> {
-    let u = vec2<f32>(rand_f32(rng_seed), rand_f32(rng_seed));
-    let d = concentric_sample_disk(u);
-    let z = sqrt(max(0.0f, 1.0f - d.x * d.x - d.y * d.y));
-    return vec3<f32>(d.x, d.y, z);
+    var dir: vec3<f32>;
+    let r = sqrt(rand_f32(rng_seed));
+    let phi = TWO_PI * rand_f32(rng_seed);
+    dir.x = r * cos(phi);
+    dir.y = r * sin(phi);
+    dir.z = sqrt(max(0.0f, 1.0f - dir.x * dir.x - dir.y * dir.y));
+    return dir;
 }
 
-fn schlick_fresnel(n_dot_v: f32, f0: vec3<f32>) -> vec3<f32> {
-    return f0 + (1.0f - f0) * pow(1.0f - n_dot_v, 5);
+fn uniform_sample_hemisphere(rng_seed: ptr<function, u32>) -> vec3<f32> {
+    let r_1 = rand_f32(rng_seed);
+    let r_2 = rand_f32(rng_seed);
+    let r = sqrt(max(0.0f, 1.0f - r_1 * r_1));
+    let phi = TWO_PI * r_2;
+    return vec3<f32>(r * cos(phi), r * sin(phi), r_1);
 }
+
 
 fn to_local(tbn: mat3x3<f32>, world: vec3<f32>) -> vec3<f32> {
     return transpose(tbn) * world;
@@ -564,4 +850,14 @@ fn build_orthonormal_basis(normal: vec3<f32>, tangent: ptr<function, vec3<f32>>,
     let up = select(vec3<f32>(1.0f, 0.0f, 0.0f), vec3<f32>(0.0f, 0.0f, 1.0f), abs(normal.z) < 0.9999999f);
     *tangent = normalize(cross(up, normal));
     *bitangent = cross(normal, *tangent);
+}
+
+fn tri_surface_area(triangle: Triangle) -> f32 {
+    let e_1 = triangle.vertices[1].position - triangle.vertices[0].position;
+    let e_2 = triangle.vertices[2].position - triangle.vertices[0].position;
+    return 0.5f * length(cross(e_1, e_2));
+}
+
+fn luminance(c: vec3<f32>) -> f32 {
+    return 0.212671f * c.x + 0.715160f * c.y + 0.072169f * c.z;
 }
