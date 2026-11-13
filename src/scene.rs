@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::bvh::AABB;
 use crate::bvh::BVH;
 use crate::bvh::Bounds;
@@ -7,11 +5,11 @@ use crate::loader::obj::OBJ;
 use crate::log_error;
 use crate::texture::Texture;
 
-/// Representation of a 3D scene for use in the ray tracer.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct Scene {
     pub tris: Vec<Triangle>,
-    pub materials: HashMap<String, Material>,
+    pub emissive_tris: Vec<u32>,
+    pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
     pub bvh: BVH,
     pub camera: Camera,
@@ -44,7 +42,7 @@ impl From<OBJ> for Scene {
     fn from(obj: OBJ) -> Self {
         let mut scene = Scene::default();
 
-        for obj_tri in obj.tris {
+        for (index, obj_tri) in obj.tris.iter().enumerate() {
             let mut vertices: [Vertex; 3] = [Vertex::default(); 3];
             for i in 0..3 {
                 let position = *obj
@@ -71,13 +69,29 @@ impl From<OBJ> for Scene {
             }
             scene
                 .tris
-                .push(Triangle::new(vertices, obj_tri.material_id));
+                .push(Triangle::new(vertices, obj_tri.material_id, index as u32));
         }
 
-        scene.materials = obj.materials;
+        scene.materials = obj.materials.into_values().collect::<Vec<Material>>();
         scene.textures = obj.textures;
 
         BVH::build(&mut scene);
+
+        // Find emissive triangles
+        // TODO: Extend this to work with emission textures, for now they would be useless due to
+        // some OBJ exporters overwriting the "Ke" parameter when an emission texture is present
+        for (index, tri) in scene.tris.iter().enumerate() {
+            let material = scene.materials[tri.material_id as usize];
+            if material.emission.max_element() > 0.0 {
+                scene.emissive_tris.push(index as u32);
+            }
+        }
+
+        // FIXME: This is the same bs we have to do with textures, if the scene doesn't
+        // contain emissive triangles we have to push a dummy index...
+        if scene.emissive_tris.is_empty() {
+            scene.emissive_tris.push(0);
+        }
 
         return scene;
     }
@@ -98,15 +112,17 @@ pub struct Vertex {
 pub struct Triangle {
     pub vertices: [Vertex; 3],
     pub material_id: u32,
-    _pad: [u8; 12],
+    pub triangle_id: u32,
+    _pad: [u8; 8],
 }
 
 impl Triangle {
-    pub fn new(vertices: [Vertex; 3], material_id: u32) -> Self {
+    pub fn new(vertices: [Vertex; 3], material_id: u32, triangle_id: u32) -> Self {
         return Self {
             vertices,
             material_id,
-            _pad: [0; 12],
+            triangle_id,
+            _pad: [0; 8],
         };
     }
 
@@ -178,31 +194,43 @@ pub struct Material {
     pub roughness: f32,
     pub metallic: f32,
     pub transparency: f32,
+    pub anisotropy: f32,
+    pub clearcoat: f32,
+    pub clearcoat_roughness: f32,
+    pub a_x: f32, // Set during rendering
+    pub a_y: f32, // Set during rendering
     pub base_color_tex_id: u32,
     pub transparency_tex_id: u32,
     pub roughness_tex_id: u32,
     pub metallic_tex_id: u32,
     pub emission_tex_id: u32,
     pub normal_tex_id: u32,
+    _pad: [u8; 12],
 }
 
 impl Default for Material {
     fn default() -> Self {
         return Self {
-            base_color: glam::Vec3::new(0.8, 0.8, 0.8),
+            base_color: glam::Vec3::new(0.9, 0.9, 0.9),
             transmission: 0.0,
-            specular_tint: glam::Vec3::new(1.0, 1.0, 1.0),
-            ior: 1.45,
+            specular_tint: glam::Vec3::new(0.5, 0.5, 0.5),
+            ior: 1.5,
             emission: glam::Vec3::new(0.0, 0.0, 0.0),
-            roughness: 1.0,
+            roughness: 0.5,
             metallic: 0.0,
             transparency: 1.0,
+            anisotropy: 0.0,
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.03,
+            a_x: 0.0,
+            a_y: 0.0,
             base_color_tex_id: u32::MAX,
             transparency_tex_id: u32::MAX,
             roughness_tex_id: u32::MAX,
             metallic_tex_id: u32::MAX,
             emission_tex_id: u32::MAX,
             normal_tex_id: u32::MAX,
+            _pad: [0; 12],
         };
     }
 }

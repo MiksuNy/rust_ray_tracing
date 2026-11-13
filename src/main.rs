@@ -13,18 +13,14 @@ mod renderer;
 mod scene;
 mod texture;
 
-const WIDTH: usize = 1920;
-const HEIGHT: usize = 1080;
-const SAMPLE_COUNT: usize = 100;
-const MAX_BOUNCES: usize = 64;
-const OBJ_PATH: &str = "../res/damaged_helmet/damaged_helmet.obj";
+const OBJ_PATH: &str = "../res/cyberpunk/cyberpunk.obj";
 const IMAGE_PATH: &str = "output.png";
 
 fn main() {
     let Some(renderer) = Renderer::new(RendererOptions {
-        samples: SAMPLE_COUNT,
-        max_ray_depth: MAX_BOUNCES,
-        output_image_dimensions: (WIDTH, HEIGHT),
+        samples: 2000,
+        max_ray_depth: 12,
+        output_image_dimensions: (1920, 1080),
         output_image_path: Some(IMAGE_PATH),
         backend: RendererBackend::GPU,
         is_realtime: true,
@@ -37,9 +33,9 @@ fn main() {
     };
 
     let mut camera = Camera::default();
-    camera.position = glam::Vec3::new(-11.204422, 2.1092458, -0.12164927);
-    camera.pitch = 1.5998944;
-    camera.yaw = -179.10223;
+    camera.position = glam::Vec3::new(0.45856124, 0.42353606, -8.8515625);
+    camera.pitch = -0.00004978478;
+    camera.yaw = 289.9035;
     scene.set_camera(camera);
 
     renderer.render(Rc::new(RefCell::new(scene)));

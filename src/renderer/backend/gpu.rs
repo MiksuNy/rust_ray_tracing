@@ -319,6 +319,7 @@ struct StorageBuffers {
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,
     triangle_buffer: Buffer,
+    emissive_triangle_buffer: Buffer,
     bvh_buffer: Buffer,
     material_buffer: Buffer,
 }
@@ -326,20 +327,19 @@ struct StorageBuffers {
 impl StorageBuffers {
     fn new(device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> Self {
         let triangle_buffer = Buffer::create_storage_buffer(device, 0, &scene.tris);
-        let bvh_buffer = Buffer::create_storage_buffer(device, 1, &scene.bvh.nodes);
-        let material_buffer = Buffer::create_storage_buffer(
-            device,
-            2,
-            &scene
-                .materials
-                .clone()
-                .into_values()
-                .collect::<Vec<Material>>(),
-        );
+        let emissive_triangle_buffer =
+            Buffer::create_storage_buffer(device, 1, &scene.emissive_tris);
+        let bvh_buffer = Buffer::create_storage_buffer(device, 2, &scene.bvh.nodes);
+        let material_buffer = Buffer::create_storage_buffer(device, 3, &scene.materials);
         log_info!(
             "Created a storage buffer for scene triangles: {:.2} MB ({} tris)",
             triangle_buffer.buffer.size() as f32 / 1024.0 / 1024.0,
             triangle_buffer.buffer.size() / size_of::<Triangle>() as u64
+        );
+        log_info!(
+            "Created a storage buffer for emissive scene triangles: {:.2} KB ({} ids)",
+            emissive_triangle_buffer.buffer.size() as f32 / 1024.0,
+            emissive_triangle_buffer.buffer.size() / size_of::<u32>() as u64
         );
         log_info!(
             "Created a storage buffer for BVH nodes: {:.2} MB ({} nodes)",
@@ -371,7 +371,7 @@ impl StorageBuffers {
             );
         }
         let textures_array_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
-            binding: 3,
+            binding: 4,
             visibility: wgpu::ShaderStages::COMPUTE,
             ty: wgpu::BindingType::Texture {
                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -385,7 +385,7 @@ impl StorageBuffers {
             .map(|texture| &texture.view)
             .collect::<Vec<&wgpu::TextureView>>();
         let textures_array_bind_group_entry = wgpu::BindGroupEntry {
-            binding: 3,
+            binding: 4,
             resource: wgpu::BindingResource::TextureViewArray(&texture_views),
         };
 
@@ -399,13 +399,13 @@ impl StorageBuffers {
             ..Default::default()
         });
         let textures_array_sampler_bind_group_layout_entry = wgpu::BindGroupLayoutEntry {
-            binding: 4,
+            binding: 5,
             visibility: wgpu::ShaderStages::COMPUTE,
             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             count: None,
         };
         let textures_array_sampler_bind_group_entry = wgpu::BindGroupEntry {
-            binding: 4,
+            binding: 5,
             resource: wgpu::BindingResource::Sampler(&textures_array_sampler),
         };
 
@@ -413,6 +413,7 @@ impl StorageBuffers {
             label: None,
             entries: &[
                 triangle_buffer.bind_group_layout_entry,
+                emissive_triangle_buffer.bind_group_layout_entry,
                 bvh_buffer.bind_group_layout_entry,
                 material_buffer.bind_group_layout_entry,
                 textures_array_bind_group_layout_entry,
@@ -425,6 +426,7 @@ impl StorageBuffers {
             layout: &bind_group_layout,
             entries: &[
                 triangle_buffer.bind_group_entry(),
+                emissive_triangle_buffer.bind_group_entry(),
                 bvh_buffer.bind_group_entry(),
                 material_buffer.bind_group_entry(),
                 textures_array_bind_group_entry,
@@ -436,6 +438,7 @@ impl StorageBuffers {
             bind_group,
             bind_group_layout,
             triangle_buffer,
+            emissive_triangle_buffer,
             bvh_buffer,
             material_buffer,
         };

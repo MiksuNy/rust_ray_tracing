@@ -12,22 +12,19 @@
 
 # Todo (in order of priority)
 - [ ] glTF support
-- [ ] Proper BSDF system for materials
+- [x] Proper BSDF system for materials
 - [ ] Add TLAS to the BVH
 - [ ] Improve BVH build speeds
-- [ ] Bring CPU backend to feature parity with GPU backend
+- [ ] Bring CPU backend to feature parity with offline GPU backend
 - [ ] Command line arguments for scenes and other parameters
 
 # Gallery
 #### Damaged helmet model from https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/DamagedHelmet
 ![](damaged_helmet.png)
-#### Car and dragon models from https://benedikt-bitterli.me/resources/
-![](car_with_red_blue_lights.png)
-![](dragon_orange_translucent.png)
-#### Sponza model from https://www.intel.com/content/www/us/en/developer/topic-technology/graphics-research/samples.html
-![](intel_sponza_curtains.png)
-#### Chinese dragon model downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data)
-![](chinese_dragon.png)
+#### Car model from https://benedikt-bitterli.me/resources/
+![](car.png)
+#### Salle de Bain model downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data)
+![](salle_de_bain.png)
 
 # Resources & references
 - [This book series](https://raytracing.github.io/) is *the* best resource for anyone looking to start their own ray tracer.
