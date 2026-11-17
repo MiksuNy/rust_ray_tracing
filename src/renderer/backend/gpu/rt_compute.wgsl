@@ -155,13 +155,13 @@ fn trace(ray: ptr<function, Ray>, rng_seed: ptr<function, u32>, max_ray_depth: u
             var pdf: f32;
             let f = sample_disney(hit_info, material, -(*ray).direction, hit_info.normal, &l, &pdf, rng_seed);
 
-            ray_throughput += material.emission * ray_albedo;
-
             if pdf > 0.0f {
-                ray_albedo *= f / pdf;
+                ray_albedo *= max(vec3<f32>(0.0f), f / pdf);
             } else {
                 break;
             }
+
+            ray_throughput += material.emission * ray_albedo;
 
             // Russian roulette
             if curr_ray_depth >= 2u {
@@ -492,8 +492,6 @@ fn schlick_weight(u: f32) -> f32 {
 fn set_surface_properties(ray_dir: vec3<f32>, hit_info: ptr<function, HitInfo>, material: ptr<function, Material>) {
     hit_info.eta = select(material.ior, 1.0f / material.ior, hit_info.front_face);
 
-    (*material).clearcoat_roughness = max(0.001f, material.clearcoat_roughness);
-
     // Base color
     if material.base_color_tex_id != 0xFFFFFFFF {
         (*material).base_color = pow(sample_texture(material.base_color_tex_id, hit_info.uv).rgb, vec3<f32>(2.2f));
@@ -506,13 +504,18 @@ fn set_surface_properties(ray_dir: vec3<f32>, hit_info: ptr<function, HitInfo>, 
 
     // Roughness
     if material.roughness_tex_id != 0xFFFFFFFF {
-        let roughness = sample_texture(material.roughness_tex_id, hit_info.uv).g;
-        (*material).roughness = roughness;
+        (*material).roughness = sample_texture(material.roughness_tex_id, hit_info.uv).g;
     }
 
+    // NOTE: Is this really necessary?
+    (*material).clearcoat_roughness = max(0.001f, sqr(material.clearcoat_roughness));
+
+    // NOTE: I'm pretty sure this is required, not just for the BSDF eval but also for sampling the next direction
+    (*material).roughness = max(0.001f, sqr(material.roughness));
+
     let aspect = sqrt(1.0f - material.anisotropy * 0.9f);
-    (*material).a_x = max(0.001f, sqr(material.roughness) / aspect);
-    (*material).a_y = max(0.001f, sqr(material.roughness) * aspect);
+    (*material).a_x = max(0.001f, material.roughness / aspect);
+    (*material).a_y = max(0.001f, material.roughness * aspect);
 
     // Metallic
     if material.metallic_tex_id != 0xFFFFFFFF {
@@ -527,14 +530,12 @@ fn set_surface_properties(ray_dir: vec3<f32>, hit_info: ptr<function, HitInfo>, 
     // Build ONB from geometric normal
     var tangent: vec3<f32>;
     var bitangent: vec3<f32>;
-    build_orthonormal_basis((*hit_info).normal, &tangent, &bitangent);
-    (*hit_info).tbn = mat3x3<f32>(tangent, bitangent, (*hit_info).normal);
+    build_orthonormal_basis(hit_info.normal, &tangent, &bitangent);
+    (*hit_info).tbn = mat3x3<f32>(tangent, bitangent, hit_info.normal);
 
     // FIXME: Can cause a situation where a ray is reflected through a surface because this overrides the geometric normal
     if material.normal_tex_id != 0xFFFFFFFF {
-        var texture_normal = normalize(sample_texture(material.normal_tex_id, (*hit_info).uv).xyz * 2.0f - 1.0f);
-
-        let orig_normal = hit_info.normal;
+        let texture_normal = normalize(sample_texture(material.normal_tex_id, hit_info.uv).xyz * 2.0f - 1.0f);
         (*hit_info).normal = normalize(to_world(hit_info.tbn, texture_normal));
 
         // Rebuild ONB from texture normal
@@ -669,7 +670,7 @@ fn debug_bvh(ray: Ray, factor: f32) -> vec3<f32> {
 
     var stack = array<u32, 16u>();
     var stack_ptr: u32 = 0u;
-    var node_idx: u32 = 1u; 
+    var node_idx: u32 = 1u;
 
     var debug_value = 0.0f;
     loop {
